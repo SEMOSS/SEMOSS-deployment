@@ -1,0 +1,271 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: semoss
+  name: semoss
+  namespace: semoss
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: semoss
+      app.kubernetes.io/name: semoss
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: semoss
+        app.kubernetes.io/name: semoss
+    spec:
+      containers:
+      - args:
+        - -c
+        - git reset --hard; git pull; chmod 777 *; cd $TOMCAT_HOME/webapps/Monolith/WEB-INF/lib;
+          rm $TOMCAT_HOME/webapps/Monolith/WEB-INF/lib/slf4j-log4j12-1.6.1.jar $TOMCAT_HOME/webapps/Monolith/WEB-INF/lib/logback-classic-1.2.10.jar
+          $TOMCAT_HOME/webapps/Monolith/WEB-INF/lib/slf4j-nop-1.7.25.jar; runCS.sh
+        command:
+        - /bin/bash
+        env:
+        - name: CUSTOM_SECURITY_DRIVER
+          value: org.postgresql.Driver
+        - name: CUSTOM_SECURITY_RDBMS_TYPE
+          value: POSTGRES
+        - name: CUSTOM_SECURITY_USERNAME
+          value: databaseUser
+        - name: CUSTOM_SECURITY_PASSWORD
+          value: databasePassword
+        - name: CUSTOM_SECURITY_SCHEMA
+          value: public
+        - name: CUSTOM_SECURITY_DATABASE
+          value: security
+        - name: CUSTOM_SECURITY_CONNECTION_URL
+          value: jdbc:postgresql://DB_ENDPOINT:5432/security?currentSchema=public
+        - name: CUSTOM_LM_DRIVER
+          value: org.postgresql.Driver
+        - name: CUSTOM_LM_RDBMS_TYPE
+          value: POSTGRES
+        - name: CUSTOM_LM_USERNAME
+          value: databaseUser
+        - name: CUSTOM_LM_PASSWORD
+          value: databasePassword
+        - name: CUSTOM_LM_SCHEMA
+          value: public
+        - name: CUSTOM_LM_DATABASE
+          value: localmaster
+        - name: CUSTOM_LM_CONNECTION_URL
+          value: jdbc:postgresql://DB_ENDPOINT:5432/localmaster?currentSchema=public
+        - name: CUSTOM_SCHEDULER_DRIVER
+          value: org.postgresql.Driver
+        - name: CUSTOM_SCHEDULER_RDBMS_TYPE
+          value: POSTGRES
+        - name: CUSTOM_SCHEDULER_USERNAME
+          value: databaseUser
+        - name: CUSTOM_SCHEDULER_PASSWORD
+          value: databasePassword
+        - name: CUSTOM_SCHEDULER_SCHEMA
+          value: public
+        - name: CUSTOM_SCHEDULER_DATABASE
+          value: scheduler
+        - name: CUSTOM_SCHEDULER_CONNECTION_URL
+          value: jdbc:postgresql://DB_ENDPOINT:5432/scheduler?currentSchema=public
+        - name: CUSTOM_THEMES_DRIVER
+          value: org.postgresql.Driver
+        - name: CUSTOM_THEMES_RDBMS_TYPE
+          value: POSTGRES
+        - name: CUSTOM_THEMES_USERNAME
+          value: databaseUser
+        - name: CUSTOM_THEMES_PASSWORD
+          value: databasePassword
+        - name: CUSTOM_THEMES_SCHEMA
+          value: public
+        - name: CUSTOM_THEMES_DATABASE
+          value: themes
+        - name: CUSTOM_THEMES_CONNECTION_URL
+          value: jdbc:postgresql://DB_ENDPOINT:5432/themes?currentSchema=public
+        - name: CUSTOM_USER_TRACKING_DRIVER
+          value: org.postgresql.Driver
+        - name: CUSTOM_USER_TRACKING_RDBMS_TYPE
+          value: POSTGRES
+        - name: CUSTOM_USER_TRACKING_USERNAME
+          value: databaseUser
+        - name: CUSTOM_USER_TRACKING_PASSWORD
+          value: databasePassword
+        - name: CUSTOM_USER_TRACKING_SCHEMA
+          value: public
+        - name: CUSTOM_USER_TRACKING_DATABASE
+          value: user_tracking
+        - name: CUSTOM_USER_TRACKING_CONNECTION_URL
+          value: jdbc:postgresql://DB_ENDPOINT:5432/user_tracking?currentSchema=public
+        - name: USER_TRACKING_ENABLED
+          value: "true"
+        - name: CUSTOM_MODEL_INFERENCE_LOGS_DRIVER
+          value: org.postgresql.Driver
+        - name: CUSTOM_MODEL_INFERENCE_LOGS_RDBMS_TYPE
+          value: POSTGRES
+        - name: CUSTOM_MODEL_INFERENCE_LOGS_USERNAME
+          value: databaseUser
+        - name: CUSTOM_MODEL_INFERENCE_LOGS_PASSWORD
+          value: databasePassword
+        - name: CUSTOM_MODEL_INFERENCE_LOGS_SCHEMA
+          value: public
+        - name: CUSTOM_MODEL_INFERENCE_LOGS_DATABASE
+          value: model_logs
+        - name: CUSTOM_MODEL_INFERENCE_LOGS_CONNECTION_URL
+          value: jdbc:postgresql://DB_ENDPOINT:5432/model_logs?currentSchema=public
+        - name: MODEL_INFERENCE_LOGS_ENABLED
+          value: "true"
+        - name: CUSTOM_PROMPT_DRIVER
+          value: org.postgresql.Driver
+        - name: CUSTOM_PROMPT_RDBMS_TYPE
+          value: POSTGRES
+        - name: CUSTOM_PROMPT_USERNAME
+          value: databaseUser
+        - name: CUSTOM_PROMPT_PASSWORD
+          value: databasePassword
+        - name: CUSTOM_PROMPTS_SCHEMA
+          value: public
+        - name: CUSTOM_PROMPT_DATABASE
+          value: prompt_hub
+        - name: CUSTOM_PROMPT_CONNECTION_URL
+          value: jdbc:postgresql://DB_ENDPOINT:5432/prompt_hub?currentSchema=public
+        - name: PROMPT_DB_ENABLED
+          value: "true"
+        - name: SECURITY_ON
+          value: "true"
+        - name: SETSOCIAL
+          value: "true"
+        - name: ENABLE_NATIVE
+          value: "true"
+        - name: ENABLE_NATIVE_REGISTRATION
+          value: "true"
+        - name: ENABLE_NATIVE_ACCESS_KEY_ALLOWED
+          value: "true"
+        - name: ENABLE_API_USER
+          value: "true"
+        - name: API_USER_DYNAMIC
+          value: "false"
+        - name: REDIRECT
+          value: https://INGRESS_DNS # ingress loadbalancer URL / DNS 
+        - name: R_ON
+          value: "false"
+        - name: R_CONNECTION_TYPE
+          value: JRI
+        - name: R_HOME
+          value: /tmp
+        - name: USE_TCP_PY
+          value: "false"
+        - name: USE_PY_FILE
+          value: "false"
+        - name: USE_FILE_PY
+          value: "false"
+        - name: NATIVE_PY_SERVER
+          value: "true"
+        - name: PYTHONHOME_SITE_PACKAGES
+          value: /usr/local/lib/python3.11/dist-packages
+        - name: FILE_TRANSFER_LIMIT
+          value: "500"
+        - name: FILE_UPLOAD_LIMIT
+          value: "500"
+        - name: TCP_WORKER
+          value: prerna.tcp.SocketServer
+        - name: TCP_CLIENT
+          value: prerna.tcp.client.NativePySocketClient
+        - name: PYTHONHOME
+          value: /usr
+        - name: NETTY_R
+          value: "true"
+        - name: NETTY_PYTHON
+          value: "true"
+        - name: MONOLITH_COOKIE
+          value: semoss-eks
+        - name: SEMOSS_IS_CLUSTER
+          value: "true"
+        - name: SCHEDULER_ENDPOINT
+          value: http://localhost:8080/Monolith
+        - name: SEMOSS_STORAGE_PROVIDER
+          value: S3
+        - name: S3_REGION
+          value: REGION
+        - name: S3_BUCKET
+          value: S3_BUCKET_NAME 
+        - name: S3_ACCESS_KEY
+          value: ACCESS_KEY
+        - name: S3_SECRET_KEY
+          value: SECRET_KEY
+        - name: SESSION_TIMEOUT
+          value: "15"
+        - name: OPTIONAL_COOKIES
+          value: "false"
+        - name: ZK_SERVER
+          value: ZOOKEEPER_SERVICE_IP:2181
+        - name: SEMOSS_IS_CLUSTER_ZK
+          value: "true"
+        - name: T_ON
+          value: "false"
+        - name: CHROOT_ENABLE
+          value: "true"
+        - name: CHROOT_DIR
+          value: /opt
+        - name: CHROOT_SYMLINK_PATHS
+          value: /usr/lib/python3.10,/usr/lib/python3/dist-packages,/usr/local/lib/python3.10/dist-packages
+        - name: FAKECHROOT_EXCLUDE_PATH
+          value: /dev
+        - name: ERROR_REPORT_VALVE_ENABLED
+          value: "true"
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        image: IMAGE:TAG
+        imagePullPolicy: Always
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /Monolith/api/config
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          successThreshold: 1 #needs to be 1
+          timeoutSeconds: 10
+        name: semoss
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /Monolith/api/config
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          successThreshold: 2
+          timeoutSeconds: 10
+        resources:
+          limits:
+            cpu: "8"
+            memory: 30Gi
+          requests:
+            cpu: "6"
+            memory: 24Gi
+        securityContext:
+          capabilities:
+            drop:
+            - NET_RAW
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      imagePullSecrets:
+      - name: DOCKER_PULL_SECRET
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 0
+        runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
