@@ -186,6 +186,8 @@ spec:
           value: http://localhost:8080/Monolith
         - name: SEMOSS_STORAGE_PROVIDER
           value: S3
+        - name: RCLONE_S3_NO_CHECK_BUCKET
+          value: "true"
         - name: S3_REGION
           value: REGION
         - name: S3_BUCKET
