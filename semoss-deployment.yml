@@ -172,8 +172,10 @@ spec:
           value: prerna.tcp.SocketServer
         - name: TCP_CLIENT
           value: prerna.tcp.client.NativePySocketClient
-        - name: PYTHONHOME
-          value: /usr
+        - name: SMSS_PYTHONHOME
+          value: /usr/lib/python/semossvenv
+        - name: DISABLE_GIT_TERMINAL
+          value: 'true'
         - name: NETTY_R
           value: "true"
         - name: NETTY_PYTHON
@@ -185,7 +187,9 @@ spec:
         - name: SCHEDULER_ENDPOINT
           value: http://localhost:8080/Monolith
         - name: SEMOSS_STORAGE_PROVIDER
-          value: S3
+          value: S3                       # Blob storage can be: AWS|GCP|AZURE
+        
+        # S3 storage related variables  
         - name: RCLONE_S3_NO_CHECK_BUCKET
           value: "true"
         - name: S3_REGION
@@ -196,8 +200,27 @@ spec:
           value: ACCESS_KEY
         - name: S3_SECRET_KEY
           value: SECRET_KEY
+        # GCP storage related variables
+        - name: GCP_REGION
+          value: GCP_REGION
+        - name: GCP_BUCKET
+          value: GCP_BUCKET_NAME
+        - name: GCP_SERVICE_ACCOUNT_FILE
+          value: PATH_TO_GCP_SERVICE_ACCOUNT_FILE # format: /mnt/key/key.json
+        # AZURE storage related variables
+        - name: AZ_KEY
+          value: >-
+            AZ_KEY_VALUE
+        - name: AZ_NAME
+          value: AZ_NAME
+        - name: AZ_GENERATE_DYNAMIC_SAS
+          value: AZ_GENERATE_DYNAMIC_SAS_VALUE
+        - name: AZ_CONN_STRING
+          value: >-
+            AZ_CONN_STRING_VALUE
+      
         - name: SESSION_TIMEOUT
-          value: "15"
+          value: "28800" # 8 hours
         - name: OPTIONAL_COOKIES
           value: "false"
         - name: ZK_SERVER
@@ -209,13 +232,33 @@ spec:
         - name: CHROOT_ENABLE
           value: "true"
         - name: CHROOT_DIR
-          value: /opt
+          value: /opt/chroot
         - name: CHROOT_SYMLINK_PATHS
-          value: /usr/lib/python3.10,/usr/lib/python3/dist-packages,/usr/local/lib/python3.10/dist-packages
+          value: /usr/lib/python
         - name: FAKECHROOT_EXCLUDE_PATH
           value: /dev
         - name: ERROR_REPORT_VALVE_ENABLED
           value: "true"
+        
+        # Microsoft SSO configuration environment variables
+        - name: MS_AUTHORITY
+          value: >-
+            https://MS_AUTHORITY_URL
+        - name: MS_CLIENT_ID
+          value: MS_CLIENT_ID
+        - name: MS_REDIRECT
+          value: 'https://INGRESS_DNS/Monolith/api/auth/login/ms' #INGRESS_DNS | ingress loadbalancer URL / DNS
+        - name: MS_SECRET_KEY
+          value: MS_SECRET_KEY
+        - name: MS_TENANT
+          value: MS_TENANT_URL
+        - name: ENABLE_MS
+          value: 'true'
+        - name: MS_ACCESS_KEY_ALLOWED
+          value: 'true'
+        - name: MS_DISPLAY_NAME
+          value: MS_DISPLAY_NAME
+        
         - name: POD_IP
           valueFrom:
             fieldRef:
@@ -229,7 +272,7 @@ spec:
             path: /Monolith/api/config
             port: 8080
             scheme: HTTP
-          initialDelaySeconds: 60
+          initialDelaySeconds: 45
           periodSeconds: 10
           successThreshold: 1 #needs to be 1
           timeoutSeconds: 10
@@ -243,7 +286,7 @@ spec:
             path: /Monolith/api/config
             port: 8080
             scheme: HTTP
-          initialDelaySeconds: 60
+          initialDelaySeconds: 45
           periodSeconds: 10
           successThreshold: 2
           timeoutSeconds: 10
