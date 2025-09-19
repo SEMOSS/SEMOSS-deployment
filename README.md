@@ -92,14 +92,14 @@ In the kubernetes cluster create a namespace called **semoss**.
 
 ```kubectl create ns semoss```
 
-SEMOSS requires an Apache ZooKeeper deployment. The pod can be deployed with the [ZooKeeper-deployment](zookeeper-deployment.yaml) YAML file.
-Once the ZooKeeper pod is running, create the service with the [ZooKeeper-service](zookeeper-service.yaml) YAML file.
+SEMOSS requires an Apache ZooKeeper deployment. The pod can be deployed with the [ZooKeeper-deployment](./zookeeper-deployment.yml) YAML file.
+Once the ZooKeeper pod is running, create the service with the [ZooKeeper-service](./zookeeper-service.yml) YAML file.
 
 After deploying the ZooKeeper service, obtain the service's cluster IP, as this will be used as the **ZK_SERVER** environment variable for the SEMOSS pod.
 
 ## Configuring the SEMOSS deployment
 
-The SEMOSS pods can be configured and deployed using the [SEMOSS-deployment](semoss-deployment.yaml) YAML manifest file. 
+The SEMOSS pods can be configured and deployed using the [SEMOSS-deployment](./semoss-deployment.yml) YAML manifest file. 
 Please note that the manifest has environment variables that depend on the cloud provider where the Kubernetes cluster is hosted. The following is an example of a Kubernetes deployment YAML file used in an AWS environment:
 <details>
   <summary>SEMOSS deployment file:</summary>
@@ -125,6 +125,7 @@ spec:
         app.kubernetes.io/instance: semoss
         app.kubernetes.io/name: semoss
     spec:
+      serviceAccountName: SERVICE_ACCOUNT_NAME
       containers:
       - args:
         - -c
@@ -268,8 +269,8 @@ spec:
           value: "false"
         - name: NATIVE_PY_SERVER
           value: "true"
-        - name: PYTHONHOME_SITE_PACKAGES
-          value: /usr/local/lib/python3.11/dist-packages
+        - name: SMSS_PYTHONHOME
+          value: /usr/lib/python/semossvenv
         - name: FILE_TRANSFER_LIMIT
           value: "500"
         - name: FILE_UPLOAD_LIMIT
@@ -278,8 +279,6 @@ spec:
           value: prerna.tcp.SocketServer
         - name: TCP_CLIENT
           value: prerna.tcp.client.NativePySocketClient
-        - name: PYTHONHOME
-          value: /usr
         - name: NETTY_R
           value: "true"
         - name: NETTY_PYTHON
@@ -311,7 +310,7 @@ spec:
         - name: CHROOT_DIR
           value: /opt
         - name: CHROOT_SYMLINK_PATHS
-          value: /usr/lib/python3.10,/usr/lib/python3/dist-packages,/usr/local/lib/python3.10/dist-packages
+          value: /usr/lib/python
         - name: FAKECHROOT_EXCLUDE_PATH
           value: /dev
         - name: ERROR_REPORT_VALVE_ENABLED
@@ -329,9 +328,9 @@ spec:
             path: /Monolith/api/config
             port: 8080
             scheme: HTTP
-          initialDelaySeconds: 60
+          initialDelaySeconds: 45
           periodSeconds: 10
-          successThreshold: 1 
+          successThreshold: 1 #needs to be 1
           timeoutSeconds: 10
         name: semoss
         ports:
@@ -343,7 +342,7 @@ spec:
             path: /Monolith/api/config
             port: 8080
             scheme: HTTP
-          initialDelaySeconds: 60
+          initialDelaySeconds: 45
           periodSeconds: 10
           successThreshold: 2
           timeoutSeconds: 10
@@ -371,7 +370,7 @@ spec:
       terminationGracePeriodSeconds: 30
 ```
 
-</details> 
+</details>
 
 
 To configure the SEMOSS container to use the database, storage, and ZooKeeper, update the following environment variables in the SEMOSS deployment YAML file:
@@ -389,7 +388,7 @@ To configure the SEMOSS container to use the database, storage, and ZooKeeper, u
 
 The storage bucket information also needs to be added and the environment variables depend on the cloud provider. For more information about these environment variables, refer to the [AI Server Configuration Parameters]().
   
-After updating the environment variables, deploy the SEMOSS pod using the deployment YAML file. Once the pods are running, expose the SEMOSS pods by creating a service object with the [SEMOSS-service](semoss-service.yaml) yaml file:
+After updating the environment variables, deploy the SEMOSS pod using the deployment YAML file. Once the pods are running, expose the SEMOSS pods by creating a service object with the [SEMOSS-service](./semoss-service.yml) yaml file:
 
 ```apiVersion: v1
 kind: Service
@@ -415,7 +414,7 @@ spec:
 ## Creating the Ingress service
 
 
-Use the [SEMOSS-ingress](semoss-ingress.yaml) YAML file to create the ingress resource and define the rules for routing traffic to the backend SEMOSS service.
+Use the [SEMOSS-ingress](./semoss-ingress.yml) YAML file to create the ingress resource and define the rules for routing traffic to the backend SEMOSS service.
 > **Note:** The ingress resource can be configured to have externally-reachable URLs and terminate SSL / TLS. Please see the Kubernetes [documentation](https://kubernetes.io/docs/concepts/services-networking/ingress/) for more information.
 
 <details>
@@ -516,8 +515,11 @@ spec:
 After the ingress resource has been created get the Load balancer's Address.
 ```
 $ kubectl -n semoss get ingress -o wide
-NAME             CLASS    HOSTS             ADDRESS                                                                         PORTS   AGE
-semoss-ingress   <none>   demo.semoss.org   a133d842ffa334534bcf65c267519634-78d15e3cf96b3660.elb.us-east-1.amazonaws.com   80      87d
+NAME             CLASS    HOSTS             ADDRESS                      PORTS   AGE
+semoss-ingress   <none>   demo.semoss.org   ID.elb.REGION.amazonaws.com   80      87d
 ```
 
-The address value will be used to replace the INGRESS_DNS placeholder mentioned in the **REDIRECT** key value. 
+The address value will be used to replace the INGRESS_DNS placeholder mentioned in the **REDIRECT** key value.
+
+## Additional information
+- [AWS](./docs/aws_semoss-deployment.md)
