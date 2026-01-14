@@ -1,0 +1,47 @@
+# ======================================================================
+# EnvoyFilter - HTS headers
+# ======================================================================
+# Purpose: Add the 'hts' headers
+# Ingress Rule Served:
+#   - nginx.ingress.kubernetes.io/hsts: "true"
+#   - nginx.ingress.kubernetes.io/hsts-include-subdomains: "true"
+#   - nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
+#   - nginx.ingress.kubernetes.io/hsts-preload: "true"
+#  
+#
+#
+# Notes:
+#   - 
+# ======================================================================
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: semoss-envoyfilter-hsts-headers
+  namespace: semoss
+spec:
+  workloadSelector:
+    labels:
+      gateway.networking.k8s.io/gateway-name: semoss-gateway
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: GATEWAY
+      listener:
+        filterChain:
+          filter:
+            name: envoy.filters.network.http_connection_manager
+            subFilter:
+              name: envoy.filters.http.router
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.http.lua
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+          inline_code: |
+            function envoy_on_response(response_handle)
+              response_handle:headers():add(
+                "Strict-Transport-Security",
+                "max-age=31536000; includeSubDomains; preload"
+              )
+            end

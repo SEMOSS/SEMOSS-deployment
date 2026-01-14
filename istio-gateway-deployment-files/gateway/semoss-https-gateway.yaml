@@ -1,0 +1,53 @@
+# ======================================================================
+# Gateway - HTTP and HTTPS listener
+# ======================================================================
+# Purpose: Creates a loadbalancer with both HTTP and HTTPS
+#          listeners redirecting all HTTP traffic to HTTPS
+# 
+#  
+##
+# Notes:
+#   - The AWS LoadBalancer controller features (such as Security groups)
+#     can be added as annotations 
+#   - AWS NLB REQUIRES an ACM certificate
+#   - ISTIO needs a certificate to terminate the TLS connection
+#   - istio is the default gatewayclassName
+#  
+#   
+# ======================================================================
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: semoss-gateway
+  namespace: semoss
+spec:
+  infrastructure:
+    annotations:
+      # creating an internal NLB
+      service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+      # Loadbalancer can be either internal or external
+      service.beta.kubernetes.io/aws-load-balancer-internal: "false"
+      # adding SecurityGroup
+      service.beta.kubernetes.io/aws-load-balancer-security-groups: "sg-xxxxxx"
+  gatewayClassName: istio
+  listeners:
+  # HTTP listener for redirect
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces:
+        from: Same
+  # HTTPS listener
+  - name: https
+    protocol: HTTPS
+    port: 443
+    allowedRoutes:
+      namespaces:
+        from: Same
+    # Using self-signed cert so 
+    # This is needed because the NLB REQUIRES an ACM certificate
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: semoss-tls-cert

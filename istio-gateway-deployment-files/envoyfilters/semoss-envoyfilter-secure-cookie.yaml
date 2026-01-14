@@ -1,0 +1,47 @@
+# ======================================================================
+# EnvoyFilter - Secure session cookie
+# ======================================================================
+# Purpose: Add the 'Secure' attribute to cookies
+# Ingress Rule Served:
+#   - nginx.ingress.kubernetes.io/session-cookie-secure: "true
+#  
+#   
+#
+# Notes:
+#   - 
+# ======================================================================
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: semoss-envoyfilter-secure-cookie
+  namespace: semoss
+spec:
+  workloadSelector:
+    labels:
+      gateway.networking.k8s.io/gateway-name: semoss-gateway
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: GATEWAY
+      listener:
+        filterChain:
+          filter:
+            name: envoy.filters.network.http_connection_manager
+            subFilter:
+              name: envoy.filters.http.router
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.lua
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+          inline_code: |
+            function envoy_on_response(response_handle)
+              local cookie = response_handle:headers():get("set-cookie")
+              if cookie and cookie:match("semoss%-istio%-prod") then
+                if not cookie:match("Secure") then
+                  local secure_cookie = cookie .. "; Secure"
+                  response_handle:headers():replace("set-cookie", secure_cookie)
+                end
+              end
+            end

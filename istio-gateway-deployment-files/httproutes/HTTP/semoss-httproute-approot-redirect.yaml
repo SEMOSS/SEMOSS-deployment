@@ -1,0 +1,54 @@
+# ======================================================================
+# HTTPRoute - App-root Redirect (HTTP)
+# ======================================================================
+# Purpose: Redirects HTTP traffic to '/SemossWeb'
+# Ingress Rule Served:
+#   - nginx.ingress.kubernetes.io/app-root: /SemossWeb
+#   - nginx.ingress.kubernetes.io/proxy-read-timeout: "350"
+#   - nginx.ingress.kubernetes.io/proxy-send-timeout: "350"
+#  
+#
+# Traffic Flow:
+#
+# Notes:
+#   - The 'timeouts' section maps to the following ingress-nginx annotations:
+#     - nginx.ingress.kubernetes.io/proxy-read-timeout: "350"
+#     - nginx.ingress.kubernetes.io/proxy-send-timeout: "350"
+#   - Gateway API doesnt have a separate connection timeout (nginx.ingress.kubernetes.io/proxy-connect-timeout)
+#   
+# ======================================================================
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: semoss-httproute-approot-http
+  namespace: semoss
+spec:
+  parentRefs:
+  - name: semoss-gateway
+  rules:
+  # Rule 1: Redirect '/' to '/SemossWeb'
+  - matches:
+    - path:
+        type: Exact
+        value: /
+    filters:
+    - type: RequestRedirect
+      requestRedirect:
+        path:
+          type: ReplaceFullPath
+          replaceFullPath: /SemossWeb
+          # 302 for 'Temporary Redirect'
+          # 301 for 'Permanent Redirect'
+        statusCode: 302
+
+  # Rule 2: Route all other requests normally
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: semoss-service
+      port: 8080
+    timeouts:
+      request: 350s # Total request timeout in seconds (read-timeout equivalent)
+      backendRequest: 350s # Backend request timeout in seconds (send-timeout equivalent)
