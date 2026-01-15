@@ -1,0 +1,4 @@
+# HTTPRoute files
+If the Gateway you have deployed only has a HTTP listener (deployed with the [semoss-http-gateway.yaml](../gateway/semoss-http-gateway.yaml) file) then deploy the **semoss-httproute-approot-redirect.yaml** file under the [HTTP](../httproutes/HTTP/semoss-httproute-approot-redirect.yaml) folder.
+
+If you have deployed a Gateway that redirects HTTP traffic to HTTPS with the [semoss-https-gateway.yaml](../gateway/semoss-https-gateway.yaml) file then deploy the [semoss-httproute-https-redirect.yaml](../httproutes/HTTPS/semoss-httproute-https-redirect.yaml) and then the [semoss-httproute-approot-redirect.yaml](../httproutes/HTTPS/semoss-httproute-approot-redirect.yaml) files under the HTTPS folder.
