@@ -1,0 +1,47 @@
+# ======================================================================
+# BackendTrafficPolicy (BTP) - Session Affinity and Proxy timeout
+# ======================================================================
+# Purpose: Cookie-based session persistence AND proxy timeouts
+#
+# Ingress Rules Served:
+#   - nginx.ingress.kubernetes.io/affinity: "cookie"
+#   - nginx.ingress.kubernetes.io/session-cookie-name: "semoss-envoy-prod"
+#   - nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+#   - nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+#   - nginx.ingress.kubernetes.io/session-cookie-path: "/"
+#   - nginx.ingress.kubernetes.io/proxy-read-timeout: "350"
+#
+#   Note: Only ONE BackendTrafficPolicy can target an HTTPRoute.
+#         Having multiple BTP in one HTTPRoute will trigger a
+#         "Unable to target HTTPRoute <HTTPRoute name>,
+#         another BackendTrafficPolicy has already attached to it" error
+#         message in all but one of them.
+#         Envoy uses idleTimeout instead of read and send
+#
+# ======================================================================
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: semoss-backendtrafficpolicy-session-affinity
+  namespace: semoss-envoy
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: semoss-httproute-approot-redirect
+  # The following configures the session affinity cookie
+  loadBalancer:
+    type: ConsistentHash
+    consistentHash:
+      type: Cookie
+      cookie:
+        name: semoss-envoy-prod
+        ttl: 48h # Only accepts 5 digits, use hours instead of secs 
+        attributes:
+          Path: /
+          Secure: "true"
+  # Upstream idle timeout to semoss-service
+  timeout:
+    http:
+      # Max time connection can sit idle (no active requests)
+      connectionIdleTimeout: 350s

@@ -1,0 +1,39 @@
+# ======================================================================
+# EnvoyExtensionPolicy (EEP) - Cookie Path Rewrite
+# ======================================================================
+# Purpose: Rewrite cookie paths in Set-Cookie response headers
+# Ingress Rules Served:
+#   - nginx.ingress.kubernetes.io/proxy-cookie-path: "/SemossWeb /"
+#
+# This rewrites cookies from:
+#   Set-Cookie: sessionid=abc123; Path=/SemossWeb; HttpOnly
+# To:
+#   Set-Cookie: sessionid=abc123; Path=/; HttpOnly
+#
+# ======================================================================
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyExtensionPolicy
+metadata:
+  name: semoss-cookie-path-rewrite
+  namespace: semoss-envoy
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: semoss-envoy-gateway
+  lua:
+    - type: Inline
+      inline: |
+        function envoy_on_response(response_handle)
+          local headers = response_handle:headers()
+          for key, value in pairs(headers) do
+            if key:lower() == "set-cookie" then
+              -- Rewrite ANY Path attribute to Path=/
+              local modified = value:gsub("Path=[^;]+", "Path=/")
+              if modified ~= value then
+                response_handle:headers():replace(key, modified)
+                response_handle:logInfo("Rewrote cookie path: " .. value .. " -> " .. modified)
+              end
+            end
+          end
+        end

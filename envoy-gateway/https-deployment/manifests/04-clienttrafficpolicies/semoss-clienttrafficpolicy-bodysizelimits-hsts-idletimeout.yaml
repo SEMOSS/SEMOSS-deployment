@@ -1,0 +1,55 @@
+# ======================================================================
+# ClientTrafficPolicy (CTP) - Request Body Size Limits, HSTS and idle
+# ======================================================================
+# Purpose: Configure maximum request body size for client requests
+#          Adds HSTS headers. It also controls
+#          how long an HTTP connection from the client may 
+#          sit idle (no active requests)
+#
+# Ingress Rules Served:
+#   - nginx.ingress.kubernetes.io/proxy-body-size: "500m"
+#   - nginx.ingress.kubernetes.io/client-max-body-size: "500m"
+#   - nginx.ingress.kubernetes.io/hsts: "true"
+#   - nginx.ingress.kubernetes.io/hsts-include-subdomains: "true"
+#   - nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
+#   - nginx.ingress.kubernetes.io/hsts-preload: "true"
+#
+# Note: Applies to the Gateway (LB) and covers all routes
+#       through that Gateway.
+#       Controls the Maximum size of HTTP request body (file
+#       uploads, POST data, etc.).
+#       Adds HSTS headers
+#       When the idle timeout is reached, Envoy closes the connection
+#
+#       A CTP can have multiple policies and it is recommended to
+#       have a single CTP applied per Gateway to avoid
+#       an issue where the controller can only apply one policy per
+#       Gateway
+# ======================================================================
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: semoss-clienttrafficpolicy-bodysize-hsts-idletimeout
+  namespace: semoss-envoy
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: semoss-envoy-gateway
+
+  # Request body size limit (500MB)
+  connection:
+    bufferLimit: 524288000  # 500MB in bytes (500 * 1024 * 1024)
+
+  # Add HSTS
+  headers:
+    lateResponseHeaders:
+      set:
+        - name: Strict-Transport-Security
+          value: "max-age=31536000; includeSubDomains; preload"
+  
+  # idle timeout
+  timeout:
+    http:
+      idleTimeout: 350s
+
