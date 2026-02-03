@@ -1,0 +1,35 @@
+# ======================================================================
+# EnvoyFilter - Max body size
+# ======================================================================
+# Purpose: Sets the max request body size
+# Ingress Rule Served:
+#   - nginx.ingress.kubernetes.io/proxy-body-size: 500m
+#   - nginx.org/client-max-body-size: 500m
+#  
+# Notes:
+#   - Exceeding the max size limit returns an http code
+# ======================================================================
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: semoss-envoyfilter-proxy-size-limit
+  namespace: semoss
+spec:
+  workloadSelector:
+    labels:
+      gateway.networking.k8s.io/gateway-name: semoss-gateway
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: GATEWAY
+      listener:
+        filterChain:
+          filter:
+            name: envoy.filters.network.http_connection_manager
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.http.buffer
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.Buffer
+          max_request_bytes: 524288000  # 500MB (500 * 1024 * 1024)
