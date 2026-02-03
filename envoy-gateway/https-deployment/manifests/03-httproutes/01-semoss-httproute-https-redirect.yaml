@@ -2,9 +2,11 @@
 # HTTPRoute - SSL Redirect
 # ======================================================================
 # Purpose: Redirects HTTP traffic to HTTPS
+#
 # Ingress Rules Served:
 #   - nginx.ingress.kubernetes.io/ssl-redirect: "true"
 #   - nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+#
 # ======================================================================
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -16,8 +18,8 @@ spec:
     - name: semoss-envoy-gateway  # Your Gateway name
       namespace: semoss-envoy
       sectionName: http  # HTTP listener
-  hostnames:
-    - "your-domain.com"  # Replace with your actual domain
+  #hostnames:
+    #- "your-domain.com"  # Replace with your actual domain
   rules:
     - filters:
         - type: RequestRedirect

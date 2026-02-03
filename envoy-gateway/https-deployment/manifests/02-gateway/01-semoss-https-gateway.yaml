@@ -4,13 +4,11 @@
 # Purpose: Creates a loadbalancer with both HTTP and HTTPS
 #          listeners redirecting all HTTP traffic to HTTPS
 # 
-#  
 # Notes:
-#   - The AWS LoadBalancer controller features (such as Security groups)
-#     can be added as annotations 
-#   - AWS NLB REQUIRES an ACM certificate
+#   - Gateway allows the use of cloud provider controllers
+#     like the AWS LoadBalancer controller using 
+#     infrastructure annotations
 #   - Envoy needs a certificate to terminate the TLS connection
-#   
 #   
 # ======================================================================
 apiVersion: gateway.networking.k8s.io/v1
