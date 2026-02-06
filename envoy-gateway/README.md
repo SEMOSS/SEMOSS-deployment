@@ -1,194 +1,105 @@
+# Envoy Gateway Deployment Guide
+
+## Overview
+
+Envoy Gateway provides the following benefits:
+
+- **100% Open Source** - No paid subscription needed
+- **Cloud Agnostic** - Works on any Kubernetes cluster
+- **Gateway API Native** - Purpose-built for the Kubernetes Gateway API standard
+- **Lightweight** - Standalone gateway without service mesh overhead
+- **No Application Changes** - Works with existing applications
+
+## Architecture & Traffic Flow
+
 ```mermaid
-graph TD
-    Client[External Client<br/>Internet/VPC Traffic]
+graph TB
+    Client([🌐 Client Browser])
     
-    NLB[AWS Network Load Balancer<br/>Created by Gateway resource<br/>---<br/>Type: NLB<br/>Scheme: internet-facing<br/>SG: sg-0d6c86051d0dab805<br/>ACM Certificate for TLS termination]
-    
-    K8sGW[Kubernetes Service<br/>semoss-gateway-istio<br/>---<br/>HTTP: port 80<br/>HTTPS: port 443<br/>TLS: self-signed cert]
-    
-    IstioPod[Istio Gateway Pods<br/>Envoy Proxy]
-    
-    subgraph IstioResources[Istio Gateway Resources - Processing Order]
-        GW[1. Gateway semoss-gateway<br/>---<br/>gatewayClassName: istio<br/>Listeners: HTTP 80, HTTPS 443]
-        
-        EF[2. EnvoyFilters<br/>---<br/>A. proxy-size-limit: 500MB max<br/>B. hsts-headers: HSTS via Lua<br/>C. secure-cookie: Secure attribute]
-        
-        HTTP[3. HTTPRoute Decision<br/>---<br/>HTTP 80: 301 → HTTPS<br/>HTTPS 443:<br/>• / → 302 to /SemossWeb<br/>• /* → semoss-service:8080<br/>  Timeout: 350s]
-        
-        DR[4. DestinationRule<br/>---<br/>Host: semoss-service<br/>Session Affinity:<br/>Cookie: semoss-istio-prod<br/>TTL: 48h]
+    subgraph Internet["Internet / VPC"]
+        LB[☁️ Cloud Load Balancer<br/>AWS ELB / GCP LB / Azure LB]
     end
     
-    AppSvc[Kubernetes Service<br/>semoss-service:8080]
+    subgraph K8s["Kubernetes Cluster"]
+        subgraph EnvoyNS["envoy-gateway-system namespace"]
+            EnvoySvc["Kubernetes Service<br/>━━━━━━━━━━━━<br/>envoy-semoss-envoy-gateway<br/>Type: LoadBalancer<br/>Ports: 80, 443"]
+            
+            EnvoyPod["Envoy Proxy Pod<br/>━━━━━━━━━━━━<br/>Processes traffic<br/>Applies policies"]
+            
+            EnvoySvc -.Load Balance.-> EnvoyPod
+        end
+        
+        subgraph AppNS["semoss namespace"]
+            AppSvc["Kubernetes Service<br/>━━━━━━━━━━━━<br/>semoss-service<br/>Type: ClusterIP<br/>Port: 8080"]
+            
+            AppPod["App Pod<br/>━━━━━━━━━━━━<br/>app=semoss<br/>Port: 8080"]
+            
+            AppSvc -.Session Affinity<br/>via Cookie.-> AppPod
+        end
+    end
     
-    Pod1[Application Pod 1<br/>semoss app]
-    Pod2[Application Pod 2<br/>semoss app]
+    Client -->|"1. HTTP :80<br/>HTTPS :443"| LB
+    LB -->|"2. Forward"| EnvoySvc
+    EnvoySvc -->|"3. Load Balance"| EnvoyPod
     
-    Client -->|HTTP/HTTPS| NLB
-    NLB -->|Forwards to Istio Gateway| K8sGW
-    K8sGW --> IstioPod
-    IstioPod --> GW
-    GW --> EF
-    EF --> HTTP
-    HTTP --> DR
-    DR -->|With sticky sessions| AppSvc
-    AppSvc --> Pod1
-    AppSvc --> Pod2
+    EnvoyPod -->|"4. Route Request<br/>(with policies applied)"| AppSvc
+    AppSvc -->|"5. Forward"| AppPod
+    
+    AppPod -.->|"6. Response"| AppSvc
+    AppSvc -.->|"7. Return"| EnvoyPod
+    EnvoyPod -.->|"8. Response<br/>(with policies applied)"| EnvoySvc
+    EnvoySvc -.->|"9. Return"| LB
+    LB -.->|"10. Final Response"| Client
+    
+    Note1["📝 Policies Applied at Envoy Pod:<br/>• ClientTrafficPolicy (request)<br/>• HTTPRoute matching & redirects<br/>• BackendTrafficPolicy (session affinity)<br/>• EnvoyExtensionPolicy (response rewrite)"]
+    
+    EnvoyPod -.-> Note1
+    
+    style Client stroke:#1976d2,stroke-width:3px
+    style LB stroke:#f57c00,stroke-width:2px
+    style EnvoyNS stroke:#7b1fa2,stroke-width:2px
+    style EnvoySvc stroke:#7b1fa2,stroke-width:2px
+    style EnvoyPod stroke:#7b1fa2,stroke-width:2px
+    style AppNS stroke:#f9a825,stroke-width:2px
+    style AppSvc stroke:#f9a825,stroke-width:2px
+    style AppPod stroke:#f9a825,stroke-width:2px
+    style Note1 stroke:#388e3c,stroke-width:1px
 
-    style Client fill:#e1f5ff
-    style NLB fill:#fff4e1
-    style K8sGW fill:#f0e1ff
-    style IstioPod fill:#f0e1ff
-    style IstioResources fill:#e8f5e9
-    style AppSvc fill:#fff3e0
-    style Pod1 fill:#ffe0b2
-    style Pod2 fill:#ffe0b2
 ```
 
+## Prerequisites
 
-# Envoy Gateway Communication Flow Diagram
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           EXTERNAL CLIENT                                │
-│                         (Internet/VPC Traffic)                           │
-└────────────────────────────────┬────────────────────────────────────────┘
-                                 │
-                                 │ HTTP (port 80) or HTTPS (port 443)
-                                 │
-                                 ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          AWS NETWORK LOAD BALANCER                       │
-│                        (Created by Gateway resource)                     │
-│  ┌────────────────────────────────────────────────────────────────┐    │
-│  │ Annotations:                                                    │    │
-│  │ - Type: NLB                                                     │    │
-│  │ - Scheme: External (internet-facing)                            │    │
-│  │ - Security Group: sg-xxxxxx                                     │    │
-│  │ - ACM Certificate: Attached for TLS termination at NLB          │    │
-│  └────────────────────────────────────────────────────────────────┘    │
-└──────────────────────────┬──────────────────────────────────────────────┘
-                           │
-                           │ Forwards to Envoy Proxy Service
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      KUBERNETES SERVICE (Envoy)                          │
-│                 (envoy-semoss-envoy-gateway service)                     │
-│                                                                           │
-│  Listener Configuration:                                                 │
-│  ├─ HTTP Listener (port 80)  ─────────────────────┐                     │
-│  └─ HTTPS Listener (port 443)                     │                     │
-│      └─ TLS Termination (self-signed cert)        │                     │
-└───────────────────────────┬───────────────────────┼─────────────────────┘
-                            │                       │
-                            │                       │
-              ┌─────────────▼───────────┐          │
-              │   ENVOY PROXY POD(S)    │          │
-              │  (Managed by Envoy      │          │
-              │   Gateway Controller)   │          │
-              └─────────────┬───────────┘          │
-                            │                       │
-                            │                       │
-         ┌──────────────────┴───────────────────────┘
-         │
-         │ Request Processing Pipeline
-         │
-┌────────▼─────────────────────────────────────────────────────────────────┐
-│                         ENVOY GATEWAY RESOURCES                           │
-│                         (Applied in Processing Order)                     │
-│                                                                            │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │ 1. GatewayClass (envoy)                                           │   │
-│  │    └─ Defines controller: gateway.envoyproxy.io/...              │   │
-│  │       └─ Global scope, referenced by Gateway                      │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-│                                                                            │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │ 2. Gateway (semoss-envoy-gateway)                                 │   │
-│  │    └─ Creates LB with HTTP (80) and HTTPS (443) listeners        │   │
-│  │    └─ Defines allowed routes from same namespace                 │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-│                                                                            │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │ 3. ClientTrafficPolicy (Targets: Gateway)                         │   │
-│  │    Applied BEFORE routing decisions                               │   │
-│  │    ├─ Request body size limit: 500MB                              │   │
-│  │    ├─ HSTS headers added to responses                             │   │
-│  │    └─ Client idle timeout: 350s                                   │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-│                                                                            │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │ 4. HTTPRoute Decision Tree                                         │   │
-│  │                                                                     │   │
-│  │    ┌─────────────────────────────────────────────────┐            │   │
-│  │    │ A. HTTP Listener (port 80)                      │            │   │
-│  │    │    HTTPRoute: semoss-https-redirect             │            │   │
-│  │    │    └─ ALL HTTP traffic → 301 redirect to HTTPS │            │   │
-│  │    └─────────────────────────────────────────────────┘            │   │
-│  │                                                                     │   │
-│  │    ┌─────────────────────────────────────────────────┐            │   │
-│  │    │ B. HTTPS Listener (port 443)                    │            │   │
-│  │    │    HTTPRoute: semoss-httproute-approot-redirect │            │   │
-│  │    │                                                  │            │   │
-│  │    │    Rule 1: Exact match "/"                      │            │   │
-│  │    │    └─ 302 redirect to /SemossWeb                │            │   │
-│  │    │                                                  │            │   │
-│  │    │    Rule 2: PathPrefix "/"                       │            │   │
-│  │    │    └─ Route to backend: semoss-service:8080     │            │   │
-│  │    └─────────────────────────────────────────────────┘            │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-│                                                                            │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │ 5. BackendTrafficPolicy (Targets: HTTPRoute)                      │   │
-│  │    Applied AFTER routing decision, BEFORE backend                 │   │
-│  │    ├─ Session affinity: Cookie-based (semoss-envoy-prod)          │   │
-│  │    │   └─ TTL: 48h, Path: /, Secure                               │   │
-│  │    └─ Connection idle timeout to backend: 350s                    │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-│                                                                            │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │ 6. EnvoyExtensionPolicy (Targets: Gateway)                        │   │
-│  │    Applied ON RESPONSE from backend                               │   │
-│  │    └─ Lua script rewrites Set-Cookie paths                        │   │
-│  │       (Path=/SemossWeb → Path=/)                                  │   │
-│  └──────────────────────────────────────────────────────────────────┘   │
-└────────────────────────────────┬───────────────────────────────────────┘
-                                 │
-                                 │ Routed traffic
-                                 │
-                                 ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    KUBERNETES SERVICE (semoss-service)                    │
-│                              Port: 8080                                   │
-│                       (Application Service)                               │
-└────────────────────────────────┬────────────────────────────────────────┘
-                                 │
-                                 │ Load balanced to pods
-                                 │
-                    ┌────────────┴────────────┐
-                    │                         │
-                    ▼                         ▼
-          ┌──────────────────┐      ┌──────────────────┐
-          │  APPLICATION     │      │  APPLICATION     │
-          │  POD 1           │      │  POD 2           │
-          │  (semoss app)    │      │  (semoss app)    │
-          └──────────────────┘      └──────────────────┘
-```
+### Kubernetes Gateway API CRDs
 
+The Kubernetes Gateway API CRDs do not come installed by default on most Kubernetes clusters. Install them with the following command:
 
-# Install Envoy Gateway
-
-The [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/) CRDs do not come installed by default on most Kubernetes clusters. To confirm if they have been installed run `kubectl api-resources | grep -i gateway.networking`
-
-They can be installed if they are not present with the following command:
 ```bash
 kubectl get crd gateways.gateway.networking.k8s.io &> /dev/null || \
-  { kubectl kustomize "github.com/kubernetes-sigs/gateway-api/config/crd?ref=v1.4.1" | kubectl apply -f -; }
-  ```
-
-> **Note:** Please check the [GitHub project](https://github.com/kubernetes-sigs/gateway-api/) page for the latest release version.
-
-Although the Kubernetes Gateway CRDs are already installed, please note that Envoy CRDs are in a separate helm chart so to be able to use resources like **EnvoyPatchPolicy** the following chart needs to be installed:
+  { kubectl kustomize "github.com/kubernetes-sigs/gateway-api/config/crd?ref=v1.4.0" | kubectl apply -f -; }
 ```
+
+**CRDs that will be installed:**
+
+- backendtlspolicies.gateway.networking.k8s.io
+- gatewayclasses.gateway.networking.k8s.io
+- gateways.gateway.networking.k8s.io
+- grpcroutes.gateway.networking.k8s.io
+- httproutes.gateway.networking.k8s.io
+- referencegrants.gateway.networking.k8s.io
+
+**Verify installation:**
+
+```bash
+kubectl api-resources | grep -i gateway.networking
+```
+
+> **Note:** Latest gateway-api CRD API list and release version can be found on the [project's](https://github.com/kubernetes-sigs/gateway-api) repository.
+
+### Envoy Gateway CRDs
+
+Envoy Gateway requires its own CRDs to be installed separately. Install them with:
+
+```bash
 helm template eg oci://docker.io/envoyproxy/gateway-crds-helm \
   --version v1.6.2 \
   --set crds.gatewayAPI.enabled=false \
@@ -197,15 +108,8 @@ helm template eg oci://docker.io/envoyproxy/gateway-crds-helm \
   | kubectl apply --server-side -f -
 ```
 
-This is the explanation behind the settings used in the previous command: 
-- crds.gatewayAPI.enabled=<true|false>  => Installs standard Gateway API CRDs
-- crds.gatewayAPI.channel=<standard|experimental> => installs from standard or experimental Channels
-- crds.envoyGateway.enabled=<true|false> => Installs Envoy-specific CRDs
+**CRDs that will be installed:**
 
-
-The `kubectl apply --server-side -f -` is used tp avoid a known size issue with deploying CRDs with helm (invalid: metadata.annotations: Too long: may not be more than 262144 bytes).
-
-To confirm that the Envoy CRDs were installed run `kubectl api-resources | grep -i gateway.envoyproxy`. The following are the CRDs that get deployed:
 - backends.gateway.envoyproxy.io
 - backendtrafficpolicies.gateway.envoyproxy.io
 - clienttrafficpolicies.gateway.envoyproxy.io
@@ -215,8 +119,16 @@ To confirm that the Envoy CRDs were installed run `kubectl api-resources | grep 
 - httproutefilters.gateway.envoyproxy.io
 - securitypolicies.gateway.envoyproxy.io
 
+**Verify installation:**
 
-Once the Envoy CRDs have been deployed, install Envoy Gateway with helm by running the following command:
+```bash
+kubectl api-resources | grep -i gateway.envoyproxy
+```
+
+## Installation
+
+Install Envoy Gateway using Helm:
+
 ```bash
 helm install eg oci://docker.io/envoyproxy/gateway-helm \
   --version v1.6.2 \
@@ -225,85 +137,37 @@ helm install eg oci://docker.io/envoyproxy/gateway-helm \
   --skip-crds
 ```
 
-> **Note:** If needed, add the `--set config.envoyGateway.extensionApis.enableEnvoyPatchPolicy=true` flag to [enable the Envoy Gateway's backend API](https://github.com/envoyproxy/gateway/issues/7458) in the "envoy-gateway-config" ConfigMap so Envoy patch policies can be applied to the Gateway resources.
+## What's Deployed?
 
-## Deploying the Envoy Gateway manifests
+After installation, the following Envoy Gateway components are deployed to the envoy-gateway-system namespace:
 
+**✅ Installed:**
 
-Envoy's gateway class is not created by default and the default  in the envoy-gateway-system namespace does not allow envoy polcy patches at the gateway resource. The HSTS headers need to have the following code added to the envoy-gateway-config for the HSTS headers to be added to all responses and not to only one single httproute:
-```bash
-extensionApis:
-      enableEnvoyPatchPolicy: true  # ← Add this line
-```
+- Envoy Gateway controller (control plane)
+- Gateway API support
 
-The progress can be checked with:
-```bash
-helm status eg -n envoy-gateway-system
-```
+**❌ Not Installed:**
 
-For the most recent Envoy install commands please go to [Envoy Gateway helm install document](https://gateway.envoyproxy.io/docs/install/install-helm/) and for the latest version see the [GitHub project](https://github.com/envoyproxy/gateway) page.
+- GatewayClass resource
+- Gateway instances (created when you deploy a Gateway resource)
+- Monitoring/telemetry addons
 
-## Creating the Gateway class
+---
 
-Envoy's gateway class is not created by default 
+## Next Step: Expose Your Application
 
-# Resource Relationship Diagram
-```
-                    ┌─────────────────────┐
-                    │   GatewayClass      │
-                    │     (envoy)         │
-                    └──────────┬──────────┘
-                               │ references
-                               │
-                    ┌──────────▼──────────┐
-            ┌───────┤      Gateway        ├───────┐
-            │       │ (semoss-envoy-      │       │
-            │       │      gateway)       │       │
-            │       └─────────────────────┘       │
-            │                                      │
-    targeted by                            targeted by
-            │                                      │
-┌───────────▼────────────┐          ┌──────────────▼─────────────┐
-│ ClientTrafficPolicy    │          │ EnvoyExtensionPolicy       │
-│ - Body size: 500MB     │          │ - Cookie path rewrite      │
-│ - HSTS headers         │          │   (Lua script)             │
-│ - Idle timeout: 350s   │          └────────────────────────────┘
-└────────────────────────┘
-                               
-                    ┌─────────────────────┐
-            ┌───────┤     HTTPRoute       ├───────┐
-            │       │ (approot-redirect)  │       │
-            │       └─────────────────────┘       │
-            │                │                     │
-    parent ref to     routes to              targeted by
-       Gateway       semoss-service               │
-            │                                      │
-            │                         ┌────────────▼────────────┐
-            │                         │ BackendTrafficPolicy    │
-            │                         │ - Session affinity      │
-            │                         │ - Upstream idle: 350s   │
-            │                         └─────────────────────────┘
-            │
-            │       ┌─────────────────────┐
-            └───────┤     HTTPRoute       │
-                    │ (https-redirect)    │
-                    └─────────────────────┘
-                         (redirects HTTP→HTTPS)
-```
+With Envoy Gateway installed, you're ready to expose your application by creating a Gateway resource. The Gateway creates a LoadBalancer that routes external traffic to your application.
+
+**Choose Your Path:**
+
+**[HTTP Deployment →](./http-deployment/README.md)**  
+Basic external access without encryption (single HTTP listener on port 80)
+
+**[HTTPS Deployment →](./https-deployment/README.md)**  
+Secure access with TLS certificate management (HTTPS listener on port 443 + optional HTTP redirect)
+
+> **Note:** Both paths create a LoadBalancer Service—the difference is in the Gateway's listener configuration and certificate management.
 
 
-
-# Uninstall Envoy Gateway
-
-To uninstall the Envoy CRDs:
-```
-helm template eg-crds oci://docker.io/envoyproxy/gateway-crds-helm \
-  --version v1.6.2 \
-  --set crds.gatewayAPI.enabled=false \
-  --set crds.gatewayAPI.channel=standard \
-  --set crds.envoyGateway.enabled=true \
-  | kubectl delete -f -
-```
-
-To uninstall envoy `helm uninstall eg -n envoy-gateway-system`
-
+---
+**← Back to [Main Guide](../README.md)**
