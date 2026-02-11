@@ -219,16 +219,13 @@ kubectl get pods -n app-namespace
 
 Now that your application has the Istio sidecar, choose your deployment path to create the Gateway resource:
 
-- **HTTP Deployment →**
+- **[HTTP Deployment](./http-deployment/) →**
 Basic external access without encryption (single HTTP listener on port 80)
 
-- **HTTPS Deployment →**
+- **[HTTPS Deployment](./https-deployment/) →**
 Secure access with TLS certificate management (HTTPS listener on port 443 + optional HTTP redirect)
 
 > **Note:** Both paths create a LoadBalancer Service — the difference is in the Gateway's listener configuration and certificate management.
 
 ---
-
 **← Back to [Main Guide](../README.md)**
-
----

@@ -160,14 +160,13 @@ With Envoy Gateway installed, you're ready to expose your application by creatin
 
 **Choose Your Path:**
 
-**[HTTP Deployment →](./http-deployment/README.md)**  
+**[HTTP Deployment →](./http-deployment/)**  
 Basic external access without encryption (single HTTP listener on port 80)
 
-**[HTTPS Deployment →](./https-deployment/README.md)**  
+**[HTTPS Deployment →](./https-deployment/)**  
 Secure access with TLS certificate management (HTTPS listener on port 443 + optional HTTP redirect)
 
 > **Note:** Both paths create a LoadBalancer Service—the difference is in the Gateway's listener configuration and certificate management.
-
 
 ---
 **← Back to [Main Guide](../README.md)**
