@@ -31,8 +31,12 @@ Databases/Schemas that need to be created:
 - scheduler
 - themes
 - user_tracking
-- model_logs
 - prompt_hub
+
+It is best to make these separate database instances for independent scaling
+
+- model_logs
+- audit_logs
 
 The names used for the schemas/databases can be changed to fit the project's naming standards.
 
@@ -239,6 +243,22 @@ spec:
           value: jdbc:postgresql://DATABASE_URL:DATABASE_PORT/PROMPT_HUB_DATABASE_NAME?currentSchema=PROMPT_HUB_SCHEMA_NAME
         - name: PROMPT_DB_ENABLED
           value: "true"
+        - name: CUSTOM_AUDITLOGS_DRIVER
+          value: org.postgresql.Driver
+        - name: CUSTOM_AUDITLOGS_RDBMS_TYPE
+          value: POSTGRES
+        - name: CUSTOM_AUDITLOGS_USERNAME
+          value: myuser
+        - name: CUSTOM_AUDITLOGS_PASSWORD
+          value: mypassword
+        - name: CUSTOM_AUDITLOGS_SCHEMA
+          value: public
+        - name: CUSTOM_AUDITLOGS_DATABASE
+          value: semoss_audit
+        - name: CUSTOM_AUDITLOGS_CONNECTION_URL
+          value: jdbc:postgresql://db:5432/semoss_audit?currentSchema=public
+        - name: AUDIT_LOGS_DATABASE_ENABLED
+          value: "true"
         - name: SECURITY_ON
           value: "true"
         - name: SETSOCIAL
@@ -284,7 +304,7 @@ spec:
         - name: NETTY_PYTHON
           value: "true"
         - name: MONOLITH_COOKIE
-          value: semoss-eks
+          value: semoss
         - name: SEMOSS_IS_CLUSTER
           value: "true"
         - name: SCHEDULER_ENDPOINT
