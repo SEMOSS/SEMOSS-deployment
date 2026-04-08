@@ -19,7 +19,7 @@
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: BackendTrafficPolicy
 metadata:
-  name: semoss-backendtrafficpolicy-session-affinity
+  name: semoss-backendtrafficpolicy-<path>-session-affinity
   namespace: semoss
 spec:
   targetRef:
