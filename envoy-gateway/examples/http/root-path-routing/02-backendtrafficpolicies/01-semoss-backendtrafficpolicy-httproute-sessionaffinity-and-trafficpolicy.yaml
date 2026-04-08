@@ -35,7 +35,7 @@ spec:
     consistentHash:
       type: Cookie
       cookie:
-        name: semoss-nginx-prod
+        name: semoss-envoy-prod
         ttl: 48h
         attributes:
           Path: /
