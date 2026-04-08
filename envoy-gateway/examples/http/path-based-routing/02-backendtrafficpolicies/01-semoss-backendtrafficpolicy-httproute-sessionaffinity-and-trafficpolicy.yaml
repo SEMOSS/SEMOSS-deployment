@@ -25,14 +25,14 @@ spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
-    name: semoss-httproute-approot-redirect
+    name: semoss-httproute-app-<path>-redirect
   # The following configures the session affinity cookie
   loadBalancer:
     type: ConsistentHash
     consistentHash:
       type: Cookie
       cookie:
-        name: semoss-dev-envoy-sticky
+        name: semoss-<path>-envoy-sticky
         ttl: 48h # Only accepts 5 digits, use hours instead of secs
         attributes:
           Path: /
