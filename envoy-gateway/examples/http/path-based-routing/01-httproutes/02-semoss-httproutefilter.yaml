@@ -12,7 +12,7 @@ apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: HTTPRouteFilter
 metadata:
   name: httproutefilter-path-rewritetarget
-  namespace: semoss-envoy-path
+  namespace: semoss
 spec:
   urlRewrite:
     path:
