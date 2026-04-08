@@ -1,7 +1,7 @@
 # ======================================================================
-# HTTPRoute - Multi-path App-root Redirect (HTTPS)
+# HTTPRoute - Multi-path App-root Redirect (HTTP)
 # ======================================================================
-# Purpose: Redirects HTTPS traffic to '/<path>/SemossWeb'
+# Purpose: Redirects HTTP traffic to '/<path>/SemossWeb'
 #
 # Ingress Rules Served:
 #   - nginx.ingress.kubernetes.io/app-root: /SemossWeb
@@ -18,11 +18,11 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: semoss-httproute-approot-redirect
-  namespace: semoss-envoy-path
+  namespace: semoss
 spec:
   parentRefs:
   - name: semoss-envoy-gateway
-    sectionName: https
+    sectionName: http
 
   #hostnames:
   #- "container.sample.org"

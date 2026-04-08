@@ -20,7 +20,7 @@ apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: BackendTrafficPolicy
 metadata:
   name: semoss-backendtrafficpolicy-session-affinity
-  namespace: semoss-envoy-path
+  namespace: semoss
 spec:
   targetRef:
     group: gateway.networking.k8s.io
@@ -32,7 +32,7 @@ spec:
     consistentHash:
       type: Cookie
       cookie:
-        name: envoy-session
+        name: semoss-dev-envoy-sticky
         ttl: 48h # Only accepts 5 digits, use hours instead of secs
         attributes:
           Path: /
