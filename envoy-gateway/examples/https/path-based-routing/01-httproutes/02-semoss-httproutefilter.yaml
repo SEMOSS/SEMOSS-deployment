@@ -1,5 +1,5 @@
 # ======================================================================
-# HTTPRouteFilter - Rewrite Target (root based routing)
+# HTTPRouteFilter - Rewrite Target (path based routing)
 # ======================================================================
 # Purpose: HTTPRouteFilter will strip /<PATH> and pass
 # the remaining path to the backend
@@ -11,12 +11,12 @@
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: HTTPRouteFilter
 metadata:
-  name: httproutefilter-root-path-rewritetarget
-  namespace: semoss-envoy-path
+  name: httproutefilter-<path>-rewritetarget
+  namespace: semoss
 spec:
   urlRewrite:
     path:
       type: ReplaceRegexMatch
       replaceRegexMatch:
-        pattern: '^/(.*)$'
+        pattern: '^/<path>/(.*)$'
         substitution: '/\1'

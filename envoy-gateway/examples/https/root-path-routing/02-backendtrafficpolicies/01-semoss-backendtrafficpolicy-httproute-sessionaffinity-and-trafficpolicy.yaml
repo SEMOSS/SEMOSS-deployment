@@ -19,13 +19,16 @@
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: BackendTrafficPolicy
 metadata:
-  name: semoss-backendtrafficpolicy-session-affinity
-  namespace: semoss-envoy-path
+  name: semoss-backendtrafficpolicy-root-session-affinity
+  namespace: semoss                  # A BackendTrafficPolicy can only target
+                                     # resources in the same namespace as the policy itself.
+                                     # If it targets an HTTPRoute in namespace B,
+                                     # the BackendTrafficPolicy must also be in namespace B.
 spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
-    name: semoss-httproute-approot-redirect
+    name: semoss-httproute-root-approot-redirect
   # The following configures the session affinity cookie
   loadBalancer:
     type: ConsistentHash
@@ -33,12 +36,11 @@ spec:
       type: Cookie
       cookie:
         name: envoy-session
-        ttl: 48h # Only accepts 5 digits, use hours instead of secs
+        ttl: 48h
         attributes:
           Path: /
           Secure: "true"
   # Upstream idle timeout to semoss-service
   timeout:
     http:
-      # Max time connection can sit idle (no active requests)
       connectionIdleTimeout: 350s
