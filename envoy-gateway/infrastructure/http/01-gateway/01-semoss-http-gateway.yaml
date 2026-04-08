@@ -1,0 +1,40 @@
+# ======================================================================
+# Gateway - HTTP listener
+# ======================================================================
+# Purpose: Creates a loadbalancer with both HTTP listeners 
+#
+#
+# Notes:
+#   - The AWS LoadBalancer controller features (such as Security groups)
+#     can be added as annotations
+#  
+#  if the loadbalncer needs to route to services in different namespaces
+#  then the allowedRoutes needs to be set to "all":
+#  allowedRoutes:
+#     namespaces:
+#       from: All  # Allow HTTPRoutes from any namespace to attach
+#
+# ======================================================================
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: semoss-envoy-gateway
+  namespace: semoss
+spec:
+  infrastructure:
+    annotations:
+      # creating an internal NLB
+      service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+      # Loadbalancer can be either internal or external
+      service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+      # adding SecurityGroup
+      #service.beta.kubernetes.io/aws-load-balancer-security-groups: "sg-xxx"
+  gatewayClassName: envoy
+  listeners:
+  # HTTP listener for redirect
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces:
+        from: All
