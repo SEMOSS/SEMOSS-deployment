@@ -1,0 +1,100 @@
+# ======================================================================
+# HTTPRoute - Multi-path App-root Redirect (HTTPS)
+# ======================================================================
+# Purpose: Redirects HTTPS traffic to '/<path>/SemossWeb'
+#
+# Ingress Rules Served:
+#   - nginx.ingress.kubernetes.io/app-root: /SemossWeb
+#
+# Notes: Since a single loadbalancer will have the same hostname
+# and needs to use path based routing then
+# every namespace needs to have its own HTTPRoute manifest.
+#
+# The Envoy Gateway will still apply and enforce "Rule ordering"
+# The /<path>/* rules will come before the /* rules
+#
+# =====================================================================
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: semoss-httproute-approot-redirect
+  namespace: semoss-envoy-path
+spec:
+  parentRefs:
+  - name: semoss-envoy-gateway
+    sectionName: https
+
+  #hostnames:
+  #- "container.sample.org"
+
+  rules:
+  # ============================================
+  # /<path> APPLICATION (Backend Service
+  # in will be in the same NS)
+  #
+  # MORE SPECIFIC RULES - MUST COME FIRST!
+  # ============================================
+
+  # Rule 1a: Redirect /sample → /sample/SemossWeb
+  - matches:
+    - path:
+        type: Exact
+        value: /<path>
+    filters:
+    - type: RequestRedirect
+      requestRedirect:
+        path:
+          type: ReplaceFullPath
+          replaceFullPath: /<path>/SemossWeb/packages/client/dist/
+        statusCode: 302
+
+  # Rule 1b: Redirect /sample/ → /sample/SemossWeb
+  - matches:
+    - path:
+        type: Exact
+        value: /<path>/
+    filters:
+    - type: RequestRedirect
+      requestRedirect:
+        path:
+          type: ReplaceFullPath
+          replaceFullPath: /<path>/SemossWeb/packages/client/dist/
+        statusCode: 302
+
+  # Rule 1b2: Redirect /sample/SemossWeb (no trailing slash) → /sample/SemossWeb/
+  # Without this rule, Envoy strips /sample and sends /SemossWeb to Tomcat, which
+  # then issues a 301 to /SemossWeb/ — losing the /sample prefix in the Location header.
+  # Intercepting here preserves the prefix before the request ever reaches the backend.
+  - matches:
+    - path:
+        type: Exact
+        value: /<path>/SemossWeb
+    filters:
+    - type: RequestRedirect
+      requestRedirect:
+        path:
+          type: ReplaceFullPath
+          replaceFullPath: /<path>/SemossWeb/packages/client/dist
+        statusCode: 302
+
+  # 4. Catch-all: RegularExpression (least specific, matches everything)
+  # MUST come after all exact matches
+  - matches:
+    - path:
+        type: RegularExpression
+        value: '^/<path>/.*'
+    filters:
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        set:
+        - name: X-Forwarded-Prefix
+          value: /<path>
+    - type: ExtensionRef
+      extensionRef:
+        group: gateway.envoyproxy.io
+        kind: HTTPRouteFilter
+        name: httproutefilter-path-rewritetarget
+    backendRefs:
+    - name: semoss-service    # sample Service is in the same sample-envoy-path NS as the GW
+      #namespace:<namespace>  # Defaults to HTTPRoute's namespace if no "namespace" is provided
+      port: 8080
