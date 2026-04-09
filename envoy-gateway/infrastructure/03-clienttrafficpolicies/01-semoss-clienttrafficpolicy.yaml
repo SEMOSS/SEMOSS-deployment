@@ -29,7 +29,7 @@ apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: ClientTrafficPolicy
 metadata:
   name: semoss-clienttrafficpolicy
-  namespace: semoss # Needs to be in the Same NS as the GW
+  namespace: semoss    # Needs to be in the Same NS as the GW
 spec:  
   targetRefs:
   - group: gateway.networking.k8s.io

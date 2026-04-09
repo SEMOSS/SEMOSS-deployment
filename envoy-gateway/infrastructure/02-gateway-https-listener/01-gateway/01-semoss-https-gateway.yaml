@@ -8,8 +8,9 @@
 # Notes:
 #   - The AWS LoadBalancer controller features (such as Security groups)
 #     can be added as annotations
-#   - AWS NLB REQUIRES a certificate
+#   - HTTPS requires a certificate
 #   - Envoy needs a certificate to terminate the TLS connection
+#
 #  if the loadbalncer needs to route to services in different namespaces
 #  then the allowedRoutes needs to be set to "all":
 #  allowedRoutes:
@@ -21,15 +22,15 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: semoss-envoy-gateway
-  namespace: semoss-envoy-path
+  namespace: semoss
 spec:
   infrastructure:
     annotations:
-      # creating an internal NLB
-      service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+      # The following example creates an internal AWS NLB
       # Loadbalancer can be either internal or external
+      service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
       service.beta.kubernetes.io/aws-load-balancer-internal: "false"
-      # adding SecurityGroup
+      # The following example add an AWS SecurityGroup
       service.beta.kubernetes.io/aws-load-balancer-security-groups: "sg-xxx"
   gatewayClassName: envoy
   listeners:
@@ -39,9 +40,9 @@ spec:
     port: 80
     allowedRoutes:
       namespaces:
-        from: All  #  HTTPRoute is created in the SAME namespace as Gateway
-                    # ALL would allow HTTPRoutes created in a different namespace to attach
-                    # THIS Gateway (needs ReferenceGrant created in the different NS
+        from: SAME  # HTTPRoute is created in the "SAME" namespace as Gateway
+                    # Setting to "ALL" allows HTTPRoutes created in a different namespace 
+                    # to attach THIS Gateway 
   # HTTPS listener
   - name: https
     protocol: HTTPS
@@ -50,7 +51,7 @@ spec:
       namespaces:
         from: All
 
-    # Using self-signed cert because the AWS NLB REQUIRES an ACM certificate
+    # Unsing the certificate from a TLS kubernetes secret.
     tls:
       mode: Terminate
       certificateRefs:

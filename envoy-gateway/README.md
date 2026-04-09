@@ -36,27 +36,38 @@ graph TB
 - Traffic routes to SEMOSS service
 
 ### Repository Structure
+
 ```bash
 infrastructure/                 # Shared cluster-level resources
-├── 01-gateway-class            # Defines the gateway implementation
-├── 02-gateway                  # Creates LoadBalancer
-├── 03-httproutes               # Global listeners (e.g., HTTPS redirect)
+├── 01-gateway-class            # Defines the gateway class
+├── 02-gateway-http-listener    # Creates a LoadBalancer with HTTP Global listener
+├── 02-gateway-https-listener   # Creates a LoadBalancer with HTTPS Global listeners and redirect
+│   ├── 01-gateway              # LoadBalancer
+│   └── 02-httproutes           # HTTPS redirect
 ├── 04-clienttrafficpolicies    # Client-side policies (e.g. Request Body Size Limits, HSTS and IddleTimeOut)
 └── 05-envoyextensionpolicies   # Cookie Path Rewrite
 
 examples/                       # Application routing templates (copy & customize)
-├── root-path-routing/          # Single app at root path (/)
-│   ├── 01-httproutes              # HTTP redirects
-│   └── 02-backendtrafficpolicies  # Session Affinity and Proxy timeout
-└── path-based-routing/         # Multiple apps with path prefixes (/api, /web)
-    ├── 01-httproutes
-    └── 02-backendtrafficpolicies
-```
+├── http                        # Single app at root path (/) exposed using an HTTP LoadBalancer
+│   └── root-path-routing/          # Single app at root path (/)
+│   │   ├── 01-httproutes              # HTTP routes
+│   │   └── 02-backendtrafficpolicies  # Session Affinity and Proxy timeout
+│   └── path-based-routing/         # Multiple apps with path prefixes (/api, /web) using an HTTP LoadBalancer
+│       ├── 01-httproutes              # HTTP routes
+│       └── 02-backendtrafficpolicies  # Session Affinity and Proxy timeout
+└── https                       # Single app at root path (/)
+    └── root-path-routing/          # Single app at root path (/) using an HTTPS LoadBalancer
+    │   ├── 01-httproutes              # HTTP redirects
+    │   └── 02-backendtrafficpolicies  # Session Affinity and Proxy timeout
+    └── path-based-routing/         # Multiple apps with path prefixes (/api, /web) using an HTTPS LoadBalancer
+        ├── 01-httproutes              # HTTP redirects
+        └── 02-backendtrafficpolicies  # Session Affinity and Proxy timeout
 
+```
 
 ## How to use
 
-- Deploy infrastructure/ (Can be a single deployment per cluster)
+- Deploy infrastructure/ and choose if you need to have an HTTP or HTTPS listener (Can be a single deployment per cluster)
 - Copy either root-path-routing/ or path-based-routing/ from examples/
 - Customize the copied resources for your SEMOSS environment.
 
