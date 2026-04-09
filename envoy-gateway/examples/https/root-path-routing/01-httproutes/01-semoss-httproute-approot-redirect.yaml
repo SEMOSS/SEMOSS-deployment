@@ -1,0 +1,60 @@
+# ======================================================================
+# HTTPRoute - root-path - App-root Redirect (HTTPS)
+# ======================================================================
+# Purpose: Redirects HTTPS traffic from '/' to '/SemossWeb'
+#
+# Ingress Rules Served:
+#   - nginx.ingress.kubernetes.io/app-root: /SemossWeb
+#
+# Notes: Since a single loadbalancer will have the same hostname
+# and needs to use path based routing then
+# every namespace needs to have its own HTTPRoute manifest.
+#
+# The Envoy Gateway will still apply and enforce "Rule ordering"
+# The '/' rules will come before the '/*' rules
+#
+# =====================================================================
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: semoss-httproute-root-approot-redirect
+  namespace: semoss
+spec:
+  parentRefs:
+  - name: semoss-envoy-gateway
+    namespace: semoss # This changes if gw is in different namespace
+    sectionName: https
+
+  #hostnames:
+  #- "container.sample.org"
+
+  rules:
+  # ============================================
+  # /sample APPLICATION (Backend Service
+  # in sample-envoy-path NS)
+  #
+  # MORE SPECIFIC RULES - MUST COME FIRST!
+  # ============================================
+
+  # Rule 1a: Redirect / → /SampleWeb
+  - matches:
+    - path:
+        type: Exact
+        value: /
+    filters:
+    - type: RequestRedirect
+      requestRedirect:
+        path:
+          type: ReplaceFullPath
+          replaceFullPath: /SemossWeb/packages/client/dist/
+        statusCode: 302
+
+  # Rule 2: Normal routing for all other paths
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: semoss-service
+      namespace: root-semoss
+      port: 8080

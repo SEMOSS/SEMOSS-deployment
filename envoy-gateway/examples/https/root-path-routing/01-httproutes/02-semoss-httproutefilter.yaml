@@ -1,0 +1,22 @@
+# ======================================================================
+# HTTPRouteFilter - Rewrite Target (root based routing)
+# ======================================================================
+# Purpose: HTTPRouteFilter will strip /<PATH> and pass
+# the remaining path to the backend
+#
+# Ingress Rules Served:
+#   - [nginx.ingress.kubernetes.io/rewrite-target: /$1]
+#
+# ======================================================================
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: HTTPRouteFilter
+metadata:
+  name: httproutefilter-root-path-rewritetarget
+  namespace: semoss
+spec:
+  urlRewrite:
+    path:
+      type: ReplaceRegexMatch
+      replaceRegexMatch:
+        pattern: '^/(.*)$'
+        substitution: '/\1'
