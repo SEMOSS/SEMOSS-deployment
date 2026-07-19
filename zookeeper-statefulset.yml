@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+  namespace: semoss
+  labels:
+    app: zookeeper
+spec:
+  # Preferred setup: a 3-node ensemble (tolerates 1 node down). For a simpler
+  # single-node ZooKeeper, see example/semoss-with-postgres-minio-zk/.
+  serviceName: zookeeper-headless   # headless service for stable per-pod DNS
+  replicas: 3                       # odd number for quorum
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      containers:
+        - name: zookeeper
+          image: zookeeper:3.9.2
+          imagePullPolicy: Always
+          ports:
+            - name: client
+              containerPort: 2181
+            - name: peer
+              containerPort: 2888
+            - name: election
+              containerPort: 3888
+          env:
+            - name: ZOO_STANDALONE_ENABLED
+              value: "false"
+            - name: ZOO_4LW_COMMANDS_WHITELIST
+              value: "ruok,srvr,stat,mntr,conf,isro"
+            - name: ZOO_SERVERS
+              value: >-
+                server.1=zookeeper-0.zookeeper-headless.semoss.svc.cluster.local:2888:3888;2181
+                server.2=zookeeper-1.zookeeper-headless.semoss.svc.cluster.local:2888:3888;2181
+                server.3=zookeeper-2.zookeeper-headless.semoss.svc.cluster.local:2888:3888;2181
+          # ZOO_MY_ID must be UNIQUE per pod. Derive it from the pod ordinal
+          # (zookeeper-0 -> 1, zookeeper-1 -> 2, ...) then hand off to the image's
+          # normal entrypoint.
+          command:
+            - bash
+            - -c
+            - |
+              export ZOO_MY_ID=$((${HOSTNAME##*-} + 1))
+              echo "Starting ZooKeeper with ZOO_MY_ID=$ZOO_MY_ID"
+              exec /docker-entrypoint.sh zkServer.sh start-foreground
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "echo ruok | nc localhost 2181 | grep imok"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "echo ruok | nc localhost 2181 | grep imok"]
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: datalog
+              mountPath: /datalog
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+    - metadata:
+        name: datalog
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

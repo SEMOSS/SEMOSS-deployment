@@ -9,28 +9,38 @@ You can find instructions on how to create the OIDC provider in the following AW
 
 ## Granting the SEMOSS pod access to other AWS resources
 
-As mentioned before, the [SEMOSS-deployment](../semoss-deployment.yml) can use AWS specific environment variables that allow the SEMOSS pod to interact with AWS resources.
-The pod launched by the SEMOSS deployment needs to be able to use a storage bucket that is created in S3.
+The SEMOSS pod's configuration — including its object-storage settings — lives in
+[`semoss-config-and-secrets.yml`](../semoss-config-and-secrets.yml), which the
+[SEMOSS-deployment](../semoss-deployment.yml) consumes via `envFrom`. Non-sensitive
+values go in the `ConfigMap`; credentials go in the `Secret`. Set the following for
+an S3 bucket:
 
-The following environment variables allow the pod to interact with the S3 bucket:
-```
-        - name: SEMOSS_STORAGE_PROVIDER
-          value: S3
-        - name: RCLONE_S3_NO_CHECK_BUCKET
-          value: "true"
-        - name: S3_REGION
-          value: REGION
-        - name: S3_BUCKET
-          value: S3_BUCKET_NAME 
-        - name: S3_ACCESS_KEY
-          value: ACCESS_KEY
-        - name: S3_SECRET_KEY
-          value: SECRET_KEY
+In the `ConfigMap` (non-sensitive):
+```yaml
+  SEMOSS_STORAGE_PROVIDER: "S3"
+  RCLONE_S3_NO_CHECK_BUCKET: "true"
+  S3_REGION: "<REGION>"
+  S3_BUCKET: "<S3_BUCKET_NAME>"
 ```
 
-The **SEMOSS_STORAGE_PROVIDER** key indicates the type of blob storage and the **RCLONE_S3_NO_CHECK_BUCKET** key tells SEMOSS to **not check** if a bucket was created already. We pass the bucket name as the value for the **S3_BUCKET** key.
+In the `Secret` (credentials — only when using static keys, see below):
+```yaml
+  S3_ACCESS_KEY: "<ACCESS_KEY>"
+  S3_SECRET_KEY: "<SECRET_KEY>"
+```
 
-For the pod to be able to write to the S3 bucket, it can make use of the **"S3_ACCESS_KEY"** and the **"S3_SECRET_KEY"** environment variables or it can use a Service Account thats linked to an IAM role.
+The **SEMOSS_STORAGE_PROVIDER** key selects the blob-storage backend (`S3` for AWS),
+and **RCLONE_S3_NO_CHECK_BUCKET** tells SEMOSS **not** to check whether the bucket
+already exists. **S3_BUCKET** is the bucket name.
+
+> **Other storage providers.** S3 is the AWS option; SEMOSS also supports MinIO,
+> Google Cloud Storage, and Azure Blob Storage. The full list of providers and
+> their keys is documented in the [main README](../README.md#using-managed--saas-dependencies)
+> and the commented sections of [`semoss-config-and-secrets.yml`](../semoss-config-and-secrets.yml).
+
+For the pod to write to the S3 bucket it can either use the **`S3_ACCESS_KEY`** /
+**`S3_SECRET_KEY`** credentials, or — recommended — a Service Account linked to an
+IAM role (IRSA), which needs no stored keys.
 
 ### Using the **"S3_ACCESS_KEY"** and the **"S3_SECRET_KEY"** environment variables
 To get a *Secret* and *Access* key, you will need to create a user with programmatic access in the IAM console. Please find more information in the [AWS guide](https://docs.aws.amazon.com/IAM/latest/UserGuide/security-creds-programmatic-access.html)
@@ -117,27 +127,43 @@ The role can allow other actions to other AWS resources. More examples can be fo
 
 #### Create the Kubernetes Service Account
 
-Create the Service Account in the Kubernetes cluster and include the IAM Role's ARN as an `eks.amazonaws.com/role-arn` annotation.
-```
+The repo ships a ready-to-fill Service Account at [`serviceaccount.yml`](../serviceaccount.yml).
+Set the IAM Role's ARN as the `eks.amazonaws.com/role-arn` annotation:
+```yaml
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: SERVICE_ACCOUNT_NAME
-  namespace: NAMESPACE
+  name: semoss-pod-s3-service-account
+  namespace: semoss
   annotations:
     eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT:role/IAM_ROLE_NAME
 ```
+Then apply it (`kubectl apply -f serviceaccount.yml`), or uncomment its line in
+[`kustomization.yaml`](../kustomization.yaml).
 
-Once the Service Account has been created it needs to be added to the [SEMOSS-deploy](../semoss-deployment.yml) yaml file as the value of the `serviceAccountName` property under the template's **spec** section.
-```
-...
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/instance: semoss
-        app.kubernetes.io/name: semoss
+Finally, run the pod as that Service Account: uncomment the `serviceAccountName`
+line already scaffolded in [`semoss-deployment.yml`](../semoss-deployment.yml) under
+the pod template's **spec** section.
+```yaml
     spec:
-      serviceAccountName: SERVICE_ACCOUNT_NAME
+      serviceAccountName: semoss-pod-s3-service-account
       containers:
-...
+      ...
 ```
+When using IRSA you don't need `S3_ACCESS_KEY` / `S3_SECRET_KEY` in the `Secret` —
+remove them so no static credentials are stored.
+
+#### Other clouds (GCP / Azure)
+
+The same keyless pattern applies on other providers — bind the SEMOSS
+`ServiceAccount` to a cloud identity via its annotation, then set
+`serviceAccountName` on the pod:
+
+| Cloud | Mechanism | ServiceAccount annotation |
+|:------|:----------|:--------------------------|
+| AWS EKS | IRSA | `eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/<ROLE>` |
+| GCP GKE | Workload Identity | `iam.gke.io/gcp-service-account: <GSA>@<PROJECT>.iam.gserviceaccount.com` |
+| Azure AKS | Workload Identity | `azure.workload.identity/client-id: <CLIENT_ID>` |
+
+> Azure Workload Identity also requires the pod label
+> `azure.workload.identity/use: "true"` on the deployment's pod template.

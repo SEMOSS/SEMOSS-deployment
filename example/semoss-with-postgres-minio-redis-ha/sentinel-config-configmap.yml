@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sentinel-config
+  namespace: semoss
+data:
+  start-sentinel.sh: |
+    #!/bin/sh
+    set -e
+    MASTER_NAME=semossmaster
+    REDIS0=redis-0.redis-headless.semoss.svc.cluster.local
+
+    # Wait for the bootstrap node, then resolve the CURRENT master (redis-0 may
+    # already be a replica if a failover happened before this sentinel started).
+    until redis-cli -h "$REDIS0" ping 2>/dev/null | grep -q PONG; do
+      echo "waiting for redis-0..."; sleep 2
+    done
+
+    ROLE=$(redis-cli -h "$REDIS0" info replication | tr -d '\r' | awk -F: '/^role:/{print $2}')
+    if [ "$ROLE" = "master" ]; then
+      MASTER_IP=$(getent hosts "$REDIS0" | awk '{print $1}')
+    else
+      MASTER_IP=$(redis-cli -h "$REDIS0" info replication | tr -d '\r' | awk -F: '/^master_host:/{print $2}')
+    fi
+    echo "Sentinel monitoring master $MASTER_IP (quorum 2)"
+
+    cat > /tmp/sentinel.conf <<EOF
+    port 26379
+    sentinel monitor $MASTER_NAME $MASTER_IP 6379 2
+    sentinel down-after-milliseconds $MASTER_NAME 5000
+    sentinel failover-timeout $MASTER_NAME 10000
+    sentinel parallel-syncs $MASTER_NAME 1
+    EOF
+
+    exec redis-sentinel /tmp/sentinel.conf

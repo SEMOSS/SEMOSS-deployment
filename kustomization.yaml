@@ -1,0 +1,47 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# One-command declarative deploy:   kubectl apply -k .
+#
+# Ordering: kustomize emits resources in a dependency-friendly kind order
+# (Namespace -> ConfigMap/Secret -> Service -> StatefulSet/Deployment -> Ingress),
+# so objects are CREATED in that order regardless of the list below. It does NOT
+# wait for readiness between them (SEMOSS relies on retrying its connections to
+# the DB / coordination backend). For guaranteed "dependency Ready before SEMOSS
+# starts" ordering, use ./deploy.sh instead.
+
+namespace: semoss
+
+resources:
+  - namespace.yml
+  - semoss-config-and-secrets.yml
+
+  # --- Cluster coordination backend ---
+  # Enable ONE backend, matching semoss-config-and-secrets.yml. Redis + Sentinel
+  # (HA) is the active default; to switch to ZooKeeper, comment out the Redis /
+  # Sentinel lines, uncomment the three ZooKeeper lines, and flip the backend
+  # block in the ConfigMap.
+  #
+  # Redis (master + replicas) + Sentinel (failover) — SEMOSS connects to the
+  # Sentinels directly (Sentinel-aware client).
+  - redis-headless-service.yml
+  - redis-config-configmap.yml
+  - redis-statefulset.yml
+  - sentinel-config-configmap.yml
+  - redis-sentinel-service.yml
+  - sentinel-statefulset.yml
+  #
+  # ZooKeeper alternative (3-node ensemble):
+  # - zookeeper-headless-service.yml
+  # - zookeeper-statefulset.yml
+  # - zookeeper-service.yml
+
+  # --- SEMOSS application ---
+  - semoss-deployment.yml
+  - semoss-service.yml
+  - semoss-ingress.yml
+
+  # --- Optional: keyless object-storage access (IRSA / Workload Identity) ---
+  # Uncomment to create the cloud-identity ServiceAccount, then set
+  # serviceAccountName in semoss-deployment.yml. See serviceaccount.yml.
+  # - serviceaccount.yml

@@ -1,0 +1,15 @@
+# Client-facing ClusterIP service. SEMOSS can use this, though ZK_SERVER in the
+# config lists all three members explicitly for faster reconnection.
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper-service
+  namespace: semoss
+spec:
+  selector:
+    app: zookeeper
+  ports:
+    - port: 2181
+      targetPort: 2181
+      protocol: TCP
+  type: ClusterIP

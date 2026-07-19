@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: semoss
+  name: semoss-deployment
+  namespace: semoss
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: semoss
+      app.kubernetes.io/name: semoss
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: semoss
+        app.kubernetes.io/name: semoss
+    spec:
+      # Block startup until the dependencies are reachable, so a plain
+      # `kubectl apply -k .` works regardless of creation order.
+      initContainers:
+        - name: wait-postgres
+          image: busybox:1.36
+          imagePullPolicy: Always
+          command: ["sh", "-c", "until nc -z postgres 5432; do echo waiting for postgres; sleep 3; done"]
+        - name: wait-minio
+          image: busybox:1.36
+          imagePullPolicy: Always
+          command: ["sh", "-c", "until nc -z minio 9000; do echo waiting for minio; sleep 3; done"]
+        - name: wait-sentinel
+          image: busybox:1.36
+          imagePullPolicy: Always
+          command: ["sh", "-c", "until nc -z redis-sentinel 26379; do echo waiting for redis-sentinel; sleep 3; done"]
+      containers:
+        - name: semoss
+          image: quay.io/semoss/semoss-dev:5.4.0-SNAPSHOT-ubuntu22-latest
+          imagePullPolicy: Always
+          command: ["/bin/bash"]
+          args: ["-c", "runCS.sh"]
+          envFrom:
+            - configMapRef:
+                name: semoss-config
+            - secretRef:
+                name: semoss-secrets
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            # Unique per-pod identity for cluster registration
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /Monolith/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /Monolith/health/ready
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 10
+            successThreshold: 2
+            failureThreshold: 3
+          resources:
+            # Example sizing for local testing; increase CPU/memory for production.
+            requests:
+              cpu: "2"
+              memory: 8Gi
+            limits:
+              cpu: "4"
+              memory: 16Gi
+          securityContext:
+            capabilities:
+              drop:
+                - NET_RAW
+      securityContext:
+        fsGroup: 0
+        runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30

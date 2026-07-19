@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# HA example: SEMOSS + Postgres + MinIO + a 3-node ZooKeeper ensemble.
+# Deploy with:  kubectl apply -k .
+
+namespace: semoss
+
+resources:
+  - namespace.yml
+  # Backing services
+  - postgres-init-configmap.yml
+  - postgres-deployment.yml
+  - postgres-service.yml
+  - minio-statefulset.yml
+  - minio-service.yml
+  - minio-createbucket-job.yml
+  # ZooKeeper ensemble (headless for peers + ClusterIP for clients)
+  - zookeeper-headless-service.yml
+  - zookeeper-service.yml
+  - zookeeper-statefulset.yml
+  # SEMOSS
+  - semoss-config-and-secrets.yml
+  - semoss-deployment.yml
+  - semoss-service.yml

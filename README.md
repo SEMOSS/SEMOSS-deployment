@@ -7,18 +7,58 @@ SEMOSS can be deployed as a service running in a Kubernetes cluster on a cloud p
 - Database (PostgreSQL)
 - Kubernetes cluster
 
-The Following diagram details the Kubernetes and cloud provider resources that will be created.
+The Following diagram details the Kubernetes and cloud provider resources that will be created (exmaple for Azure).
 
 <div align="center">
-  <a href="kubernetes-deployment.png">
-    <img alt="ollama" width="840" src="kubernetes-deployment.png">
+  <a href="img/kubernetes-deployment-azure.png">
+    <img alt="SEMOSS Kubernetes deployment architecture (Azure example)" width="840" src="img/kubernetes-deployment-azure.png">
   </a>
   </br>
 </div>
 
 Before deploying the SEMOSS container, ensure that the pod has access to both the storage bucket (e.g., S3, Azure Blob, Google Bucket) and the database. Once the necessary policies are in place, the pods and services can be deployed to the Kubernetes cluster.
 
-The details of these cloud resources will be passed to the SEMOSS pods as environment variables declared in the deployment YAML file.
+The details of these cloud resources are passed to the SEMOSS pods as environment variables. These are centralized in the [`semoss-config-and-secrets.yml`](./semoss-config-and-secrets.yml) manifest — a `ConfigMap` for non-sensitive settings and a `Secret` for credentials — which the SEMOSS `Deployment` consumes via `envFrom` rather than inlining every variable.
+
+## Repository layout
+
+| File | Purpose |
+|:-----|:--------|
+| [`namespace.yml`](./namespace.yml) | Creates the `semoss` namespace |
+| [`semoss-config-and-secrets.yml`](./semoss-config-and-secrets.yml) | `ConfigMap` (non-sensitive settings) + `Secret` (credentials), consumed by the SEMOSS pod via `envFrom` |
+| [`semoss-deployment.yml`](./semoss-deployment.yml) | SEMOSS `Deployment` |
+| [`semoss-service.yml`](./semoss-service.yml) | SEMOSS `Service` (ClusterIP) |
+| [`semoss-ingress.yml`](./semoss-ingress.yml) | NGINX `Ingress` |
+| `redis-statefulset.yml` / `redis-headless-service.yml` / `redis-config-configmap.yml` / `sentinel-statefulset.yml` / `redis-sentinel-service.yml` / `sentinel-config-configmap.yml` | Redis + Sentinel coordination backend (**default** — HA) |
+| `zookeeper-statefulset.yml` / `zookeeper-headless-service.yml` / `zookeeper-service.yml` | ZooKeeper coordination backend (alternative — 3-node ensemble) |
+| [`kustomization.yaml`](./kustomization.yaml) | Aggregates all manifests for `kubectl apply -k .` |
+| [`deploy.sh`](./deploy.sh) | Staged deploy that waits for each dependency to be Ready before the next |
+| [`example/`](./example/) | Filled-in, self-contained runnable stacks (single-node + HA) |
+| [`legacy/`](./legacy/) | Superseded manifests kept for reference (e.g. the old ZooKeeper `Deployment`) |
+
+## Quick deploy
+
+There are two ways to bring up the whole stack in dependency order. Both read their configuration from [`semoss-config-and-secrets.yml`](./semoss-config-and-secrets.yml), so edit that file first — fill in the database, storage, image, and auth placeholders.
+
+> **Prerequisites:** an external PostgreSQL database and a storage bucket must already exist (see [Database configuration](#database-configuration)), and an NGINX ingress controller should be installed (see [Ingress service](#ingress-service)).
+
+**Option A — declarative, one command (Kustomize):**
+```
+kubectl apply -k .
+```
+Creates objects in a dependency-friendly order (Namespace → ConfigMap/Secret → Services → workloads → Ingress). It does **not** wait for readiness between objects; SEMOSS retries its connections until the database and coordination backend are up.
+
+**Option B — staged, with readiness gating:**
+```
+./deploy.sh                            # Redis + Sentinel backend (default)
+CLUSTER_BACKEND=zookeeper ./deploy.sh  # ZooKeeper ensemble instead
+TIMEOUT=300s ./deploy.sh               # override the per-stage readiness timeout
+```
+Applies each stage and blocks on `kubectl rollout status` until the coordination backend is Ready before starting SEMOSS.
+
+Both default to the **Redis + Sentinel** coordination backend. To use **ZooKeeper** instead, see [Cluster coordination backend](#cluster-coordination-backend-redis-or-zookeeper). Whichever backend you choose in the manifests must match the one enabled in `semoss-config-and-secrets.yml`.
+
+The sections below walk through the same resources individually for manual / customized deploys.
 
 ## Database configuration
 
@@ -90,325 +130,124 @@ The Ingress-Nginx can launch a load balancer and manage it using [annotations](h
 
 > **Note:** The Ingress-NGINX controller can use annotations from a cloud provider's controller, such as the [AWS Load Balancer Controller](https://github.com/kubernetes-sigs/aws-load-balancer-controller). Please see the documentation for your cloud provider for more information and the Ingress-NGINX documentation for compatibility and usage information.
 
-## Deploying the ZooKeeper service
+## Cluster coordination backend (Redis or ZooKeeper)
 
-In the kubernetes cluster create a namespace called **semoss**.
+First create the **semoss** namespace (the [Quick deploy](#quick-deploy) commands do this for you):
 
-```kubectl create ns semoss```
+```
+kubectl apply -f namespace.yml     # or: kubectl create ns semoss
+```
 
-SEMOSS requires an Apache ZooKeeper deployment. The pod can be deployed with the [ZooKeeper-deployment](./zookeeper-deployment.yml) YAML file.
-Once the ZooKeeper pod is running, create the service with the [ZooKeeper-service](./zookeeper-service.yml) YAML file.
+SEMOSS uses a coordination backend to synchronize state across pods in a cluster. Choose **one** of the two options below — the backend you deploy must match the one enabled in [`semoss-config-and-secrets.yml`](./semoss-config-and-secrets.yml).
 
-After deploying the ZooKeeper service, obtain the service's cluster IP, as this will be used as the **ZK_SERVER** environment variable for the SEMOSS pod.
+### Option A — Redis + Sentinel (default)
+
+The recommended setup is a highly-available Redis: a master + 2 replicas (a `StatefulSet`) with 3 Sentinels (a `StatefulSet`) for automatic failover. SEMOSS' Redis client is **Sentinel-aware**, so it connects to the Sentinels, resolves the current master, and follows failovers on its own — no proxy needed.
+
+```
+kubectl apply -f redis-headless-service.yml -f redis-config-configmap.yml -f redis-statefulset.yml
+kubectl apply -f sentinel-config-configmap.yml -f redis-sentinel-service.yml -f sentinel-statefulset.yml
+```
+
+The `SEMOSS_IS_CLUSTER_REDIS`, `REDIS_ENABLED`, `REDIS_SENTINEL_ENABLED`, `REDIS_MASTER_NAME`, and `REDIS_SENTINEL_NODES` values are already set in the ConfigMap; `REDIS_SENTINEL_NODES` lists the three Sentinel pods. Set `REDIS_PASSWORD` / `REDIS_SENTINEL_PASSWORD` in the `Secret` if your Redis/Sentinel require auth.
+
+> **Simpler option:** for a single-node Redis (dev / smoke tests), see the filled-in [`example/semoss-with-postgres-minio-redis`](./example/semoss-with-postgres-minio-redis) stack.
+
+### Option B — ZooKeeper (alternative)
+
+A **3-node ZooKeeper ensemble** (tolerates one node failing). Deploy its headless service (for peer discovery), client service, and the StatefulSet (which gives each node persistent `/data` and `/datalog` volumes):
+
+```
+kubectl apply -f zookeeper-headless-service.yml -f zookeeper-service.yml -f zookeeper-statefulset.yml
+```
+
+The ensemble is self-configuring: each pod derives a unique `ZOO_MY_ID` from its ordinal, and `ZOO_SERVERS` lists all three members via the headless service DNS. Then, in [`semoss-config-and-secrets.yml`](./semoss-config-and-secrets.yml), disable the Redis block (`SEMOSS_IS_CLUSTER_REDIS: "false"` and remove the Redis keys) and uncomment the ZooKeeper block (`SEMOSS_IS_CLUSTER_ZK`, `ZK_SERVER`). Use one backend or the other, not both.
+
+> **Simpler option:** for a single-node ZooKeeper, see [`example/semoss-with-postgres-minio-zk`](./example/semoss-with-postgres-minio-zk). The older single-pod [Deployment](./legacy/zookeeper-deployment.yml) under `legacy/` is superseded by the StatefulSet.
 
 ## Configuring the SEMOSS deployment
 
-The SEMOSS pods can be configured and deployed using the [SEMOSS-deployment](./semoss-deployment.yml) YAML manifest file. 
-Please note that the manifest has environment variables that depend on the cloud provider where the Kubernetes cluster is hosted. The following is an example of a Kubernetes deployment YAML file used in an AWS environment:
-<details>
-  <summary>SEMOSS deployment file:</summary>
+SEMOSS configuration lives in [`semoss-config-and-secrets.yml`](./semoss-config-and-secrets.yml), split into a `ConfigMap` (non-sensitive settings) and a `Secret` (credentials). The [SEMOSS Deployment](./semoss-deployment.yml) pulls all of these in with `envFrom` instead of declaring each variable inline:
 
-```apiVersion: apps/v1
-kind: Deployment
-metadata:
-  labels:
-    app.kubernetes.io/name: semoss
-  name: semoss
-  namespace: semoss
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app.kubernetes.io/instance: semoss
-      app.kubernetes.io/name: semoss
-  strategy:
-    type: Recreate
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/instance: semoss
-        app.kubernetes.io/name: semoss
-    spec:
-      serviceAccountName: SERVICE_ACCOUNT_NAME
-      containers:
-      - args:
-        - -c
-        - git reset --hard; git pull; chmod 777 *; cd $TOMCAT_HOME/webapps/Monolith/WEB-INF/lib;
-          rm $TOMCAT_HOME/webapps/Monolith/WEB-INF/lib/slf4j-log4j12-1.6.1.jar $TOMCAT_HOME/webapps/Monolith/WEB-INF/lib/logback-classic-1.2.10.jar
-          $TOMCAT_HOME/webapps/Monolith/WEB-INF/lib/slf4j-nop-1.7.25.jar; runCS.sh
-        command:
-        - /bin/bash
-        env:
-        - name: CUSTOM_SECURITY_DRIVER
-          value: org.postgresql.Driver
-        - name: CUSTOM_SECURITY_RDBMS_TYPE
-          value: POSTGRES
-        - name: CUSTOM_SECURITY_USERNAME
-          value: DATABASE_USER
-        - name: CUSTOM_SECURITY_PASSWORD
-          value: DATABASE_PASSWORD
-        - name: CUSTOM_SECURITY_SCHEMA
-          value: SECURITY_SCHEMA_NAME
-        - name: CUSTOM_SECURITY_DATABASE
-          value: SECURITY_DATABASE_NAME
-        - name: CUSTOM_SECURITY_CONNECTION_URL
-          value: jdbc:postgresql://DATABASE_URL:DATABASE_PORT/SECURITY_DATABASE_NAME?currentSchema=SECURITY_SCHEMA_NAME
-        - name: CUSTOM_LM_DRIVER
-          value: org.postgresql.Driver
-        - name: CUSTOM_LM_RDBMS_TYPE
-          value: POSTGRES
-        - name: CUSTOM_LM_USERNAME
-          value: DATABASE_USER
-        - name: CUSTOM_LM_PASSWORD
-          value: DATABASE_PASSWORD
-        - name: CUSTOM_LM_SCHEMA
-          value: LOCALMASTER_SCHEMA_NAME
-        - name: CUSTOM_LM_DATABASE
-          value: LOCALMASTER_DATABASE_NAME
-        - name: CUSTOM_LM_CONNECTION_URL
-          value: jdbc:postgresql://DATABASE_URL:DATABASE_PORT/LOCALMASTER_DATABASE_NAME?currentSchema=CUSTOM_LM_SCHEMA
-        - name: CUSTOM_SCHEDULER_DRIVER
-          value: org.postgresql.Driver
-        - name: CUSTOM_SCHEDULER_RDBMS_TYPE
-          value: POSTGRES
-        - name: CUSTOM_SCHEDULER_USERNAME
-          value: DATABASE_USER
-        - name: CUSTOM_SCHEDULER_PASSWORD
-          value: DATABASE_PASSWORD
-        - name: CUSTOM_SCHEDULER_SCHEMA
-          value: SCHEDULER_SCHEMA_NAME
-        - name: CUSTOM_SCHEDULER_DATABASE
-          value: SCHEDULER_DATABASE_NAME
-        - name: CUSTOM_SCHEDULER_CONNECTION_URL
-          value: jdbc:postgresql://DATABASE_URL:DATABASE_PORT/SCHEDULER_DATABASE_NAME?currentSchema=CUSTOM_SCHEDULER_SCHEMA
-        - name: CUSTOM_THEMES_DRIVER
-          value: org.postgresql.Driver
-        - name: CUSTOM_THEMES_RDBMS_TYPE
-          value: POSTGRES
-        - name: CUSTOM_THEMES_USERNAME
-          value: DATABASE_USER
-        - name: CUSTOM_THEMES_PASSWORD
-          value: DATABASE_PASSWORD
-        - name: CUSTOM_THEMES_SCHEMA
-          value: THEMES_SCHEMA_NAME
-        - name: CUSTOM_THEMES_DATABASE
-          value: THEMES_DATABASE_NAME
-        - name: CUSTOM_THEMES_CONNECTION_URL
-          value: jdbc:postgresql://DATABASE_URL:DATABASE_PORT/THEMES_DATABASE_NAME?currentSchema=THEMES_SCHEMA_NAME
-        - name: CUSTOM_USER_TRACKING_DRIVER
-          value: org.postgresql.Driver
-        - name: CUSTOM_USER_TRACKING_RDBMS_TYPE
-          value: POSTGRES
-        - name: CUSTOM_USER_TRACKING_USERNAME
-          value: DATABASE_USER
-        - name: CUSTOM_USER_TRACKING_PASSWORD
-          value: DATABASE_PASSWORD
-        - name: CUSTOM_USER_TRACKING_SCHEMA
-          value: USER_TRACKING_SCHEMA_NAME
-        - name: CUSTOM_USER_TRACKING_DATABASE
-          value: USER_TRACKING_DATABASE_NAME
-        - name: CUSTOM_USER_TRACKING_CONNECTION_URL
-          value: jdbc:postgresql://DATABASE_URL:DATABASE_PORT/USER_TRACKING_DATABASE_NAME?currentSchema=USER_TRACKING_SCHEMA_NAME
-        - name: USER_TRACKING_ENABLED
-          value: "true"
-        - name: CUSTOM_MODEL_INFERENCE_LOGS_DRIVER
-          value: org.postgresql.Driver
-        - name: CUSTOM_MODEL_INFERENCE_LOGS_RDBMS_TYPE
-          value: POSTGRES
-        - name: CUSTOM_MODEL_INFERENCE_LOGS_USERNAME
-          value: DATABASE_USER
-        - name: CUSTOM_MODEL_INFERENCE_LOGS_PASSWORD
-          value: DATABASE_PASSWORD
-        - name: CUSTOM_MODEL_INFERENCE_LOGS_SCHEMA
-          value: MODEL_LOGS_SCHEMA_NAME
-        - name: CUSTOM_MODEL_INFERENCE_LOGS_DATABASE
-          value: MODEL_LOGS_DATABASE_NAME
-        - name: CUSTOM_MODEL_INFERENCE_LOGS_CONNECTION_URL
-          value: jdbc:postgresql://DATABASE_URL:DATABASE_PORT/MODEL_LOGS_DATABASE_NAME?currentSchema=MODEL_LOGS_SCHEMA_NAME
-        - name: MODEL_INFERENCE_LOGS_ENABLED
-          value: "true"
-        - name: CUSTOM_PROMPT_DRIVER
-          value: org.postgresql.Driver
-        - name: CUSTOM_PROMPT_RDBMS_TYPE
-          value: POSTGRES
-        - name: CUSTOM_PROMPT_USERNAME
-          value: DATABASE_USER
-        - name: CUSTOM_PROMPT_PASSWORD
-          value: DATABASE_PASSWORD
-        - name: CUSTOM_PROMPTS_SCHEMA
-          value: PROMPT_HUB_SCHEMA_NAME
-        - name: CUSTOM_PROMPT_DATABASE
-          value: PROMPT_HUB_DATABASE_NAME
-        - name: CUSTOM_PROMPT_CONNECTION_URL
-          value: jdbc:postgresql://DATABASE_URL:DATABASE_PORT/PROMPT_HUB_DATABASE_NAME?currentSchema=PROMPT_HUB_SCHEMA_NAME
-        - name: PROMPT_DB_ENABLED
-          value: "true"
-        - name: CUSTOM_AUDITLOGS_DRIVER
-          value: org.postgresql.Driver
-        - name: CUSTOM_AUDITLOGS_RDBMS_TYPE
-          value: POSTGRES
-        - name: CUSTOM_AUDITLOGS_USERNAME
-          value: myuser
-        - name: CUSTOM_AUDITLOGS_PASSWORD
-          value: mypassword
-        - name: CUSTOM_AUDITLOGS_SCHEMA
-          value: public
-        - name: CUSTOM_AUDITLOGS_DATABASE
-          value: semoss_audit
-        - name: CUSTOM_AUDITLOGS_CONNECTION_URL
-          value: jdbc:postgresql://db:5432/semoss_audit?currentSchema=public
-        - name: AUDIT_LOGS_DATABASE_ENABLED
-          value: "true"
-        - name: SECURITY_ON
-          value: "true"
-        - name: SETSOCIAL
-          value: "true"
-        - name: ENABLE_NATIVE
-          value: "true"
-        - name: ENABLE_NATIVE_REGISTRATION
-          value: "true"
-        - name: ENABLE_NATIVE_ACCESS_KEY_ALLOWED
-          value: "true"
-        - name: ENABLE_API_USER
-          value: "true"
-        - name: API_USER_DYNAMIC
-          value: "false"
-        - name: REDIRECT
-          value: https://INGRESS_DNS/SemossWeb/packages/client/dist/
-        - name: R_ON
-          value: "false"
-        - name: R_CONNECTION_TYPE
-          value: JRI
-        - name: R_HOME
-          value: /tmp
-        - name: USE_TCP_PY
-          value: "false"
-        - name: USE_PY_FILE
-          value: "false"
-        - name: USE_FILE_PY
-          value: "false"
-        - name: NATIVE_PY_SERVER
-          value: "true"
-        - name: SMSS_PYTHONHOME
-          value: /usr/lib/python/semossvenv
-        - name: FILE_TRANSFER_LIMIT
-          value: "500"
-        - name: FILE_UPLOAD_LIMIT
-          value: "500"
-        - name: TCP_WORKER
-          value: prerna.tcp.SocketServer
-        - name: TCP_CLIENT
-          value: prerna.tcp.client.NativePySocketClient
-        - name: NETTY_R
-          value: "true"
-        - name: NETTY_PYTHON
-          value: "true"
-        - name: MONOLITH_COOKIE
-          value: semoss
-        - name: SEMOSS_IS_CLUSTER
-          value: "true"
-        - name: SCHEDULER_ENDPOINT
-          value: http://localhost:8080/Monolith
-        - name: SEMOSS_STORAGE_PROVIDER
-          value: S3
-        - name: S3_REGION
-          value: REGION
-        - name: S3_BUCKET
-          value: BUCKET_NAME 
-        - name: SESSION_TIMEOUT
-          value: "15"
-        - name: OPTIONAL_COOKIES
-          value: "false"
-        - name: ZK_SERVER
-          value: ZK_CLUSTER_IP
-        - name: SEMOSS_IS_CLUSTER_ZK
-          value: "true"
-        - name: T_ON
-          value: "false"
-        - name: CHROOT_ENABLE
-          value: "true"
-        - name: CHROOT_DIR
-          value: /opt
-        - name: CHROOT_SYMLINK_PATHS
-          value: /usr/lib/python
-        - name: FAKECHROOT_EXCLUDE_PATH
-          value: /dev
-        - name: ERROR_REPORT_VALVE_ENABLED
-          value: "true"
-        - name: POD_IP
-          valueFrom:
-            fieldRef:
-              apiVersion: v1
-              fieldPath: status.podIP
-        image: SEMOSS_IMAGE:SEMOSS_IMAGE_TAG
-        imagePullPolicy: Always
-        livenessProbe:
-          failureThreshold: 3
-          httpGet:
-            path: /Monolith/api/config
-            port: 8080
-            scheme: HTTP
-          initialDelaySeconds: 45
-          periodSeconds: 10
-          successThreshold: 1 #needs to be 1
-          timeoutSeconds: 10
-        name: semoss
-        ports:
-        - containerPort: 8080
-          protocol: TCP
-        readinessProbe:
-          failureThreshold: 3
-          httpGet:
-            path: /Monolith/api/config
-            port: 8080
-            scheme: HTTP
-          initialDelaySeconds: 45
-          periodSeconds: 10
-          successThreshold: 2
-          timeoutSeconds: 10
-        resources:
-          limits:
-            cpu: "8"
-            memory: 30Gi
-          requests:
-            cpu: "6"
-            memory: 24Gi
-        securityContext:
-          capabilities:
-            drop:
-            - NET_RAW
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: File
-      dnsPolicy: ClusterFirst
-      restartPolicy: Always
-      schedulerName: default-scheduler
-      securityContext:
-        fsGroup: 0
-        runAsUser: 1001
-        seccompProfile:
-          type: RuntimeDefault
-      terminationGracePeriodSeconds: 30
+```yaml
+      envFrom:
+        - configMapRef:
+            name: semoss-config
+        - secretRef:
+            name: semoss-secrets
 ```
 
-</details>
+Edit `semoss-config-and-secrets.yml` to set your database connection details, storage bucket/provider, authentication providers, and cluster backend. That file is organized into commented sections — backing databases, authentication & security (SSO providers), R/Python execution, file limits, clustering, object storage, and runtime/sandboxing — with placeholders (`<...>`) for the values you need to fill in.
 
+Key groups to review:
 
-To configure the SEMOSS container to use the database, storage, and ZooKeeper, update the following environment variables in the SEMOSS deployment YAML file:
+| Section | What to set |
+|:--------|:------------|
+| Backing databases | `CUSTOM_<db>_DATABASE` / `_SCHEMA` names to match what you created; credentials + `_CONNECTION_URL` go in the `Secret` |
+| Authentication & security | Only `NATIVE` and `MICROSOFT` are enabled by default; other SSO providers (`ADFS`, `GOOGLE`, `OKTA`, `LDAP`, …) ship as commented scaffolding. Secret keys / passwords live in the `Secret` |
+| Object storage | `SEMOSS_STORAGE_PROVIDER` (`S3`, `MINIO`, `AZURE`, `GCP`, or `LOCAL_FILE_SYSTEM`) plus the matching keys; access/secret keys live in the `Secret` |
+| Clustering | Enable exactly one of the ZooKeeper or Redis blocks |
 
-| Environment Variable | Default value | New value |
-|:-------------------------|:-------|:--------|
-| **CUSTOM_(Table name)_USERNAME**| *DATABASE_USER* | Replace DATABASE_USER with the user name created for the Database |
-| **CUSTOM_(Table name)_PASSWORD**| *DATABASE_PASSWORD* | Replace DATABASE_PASSWORD with the password created for the Database|
-| **CUSTOM_(Table name)_SCHEMA**| *(table name)_SCHEMA_NAME* | Replace (table name)_SCHEMA_NAME with the Schema created for the Database|
-| **CUSTOM_(Table name)_DATABASE**| *(Table name)_DATABASE_NAME* | Replace (Table name)_DATABASE_NAME with the name created for the Database|
-| **CUSTOM_(Table name)_CONNECTION_URL** | *jdbc:postgresql://DATABASE_URL:DATABASE_PORT/DATABASE_NAME?currentSchema=SCHEMA_NAME* | Replace DATABASE_URL with the Database's endpoint, DATABASE_PORT with the Database's port, DATABASE_NAME and the SCHEMA_NAME |
-| **REDIRECT**| *https://INGRESS_DNS/SemossWeb/packages/client/dist/* | Replace INGRESS_DNS for the redirect url|
-| **ZK_SERVER** | *ZK_CLUSTER_IP* | Replace ZK_CLUSTER_IP with the ZooKeeper service's cluster IP  |
-| **image** | *SEMOSS_IMAGE:SEMOSS_IMAGE_TAG* | Replace SEMOSS_IMAGE:SEMOSS_IMAGE_TAG with the image of SEMOSS to be deployed  |
+### Example configurations
 
-The storage bucket information also needs to be added and the environment variables depend on the cloud provider. For more information about these environment variables, refer to the [AI Server Configuration Parameters]().
-  
-After updating the environment variables, deploy the SEMOSS pod using the deployment YAML file. Once the pods are running, expose the SEMOSS pods by creating a service object with the [SEMOSS-service](./semoss-service.yml) yaml file:
+Fully filled-in, runnable stacks live under [`example/`](./example) — copy one as a starting point:
+
+| Example | Coordination backend | Notes |
+|:--------|:---------------------|:------|
+| [`semoss-with-postgres-minio-zk`](./example/semoss-with-postgres-minio-zk) | ZooKeeper (single node) | Postgres + MinIO in-cluster; simplest |
+| [`semoss-with-postgres-minio-redis`](./example/semoss-with-postgres-minio-redis) | Redis (single node) | Postgres + MinIO in-cluster |
+| [`semoss-with-postgres-minio-zk-ha`](./example/semoss-with-postgres-minio-zk-ha) | ZooKeeper 3-node ensemble | HA coordination |
+| [`semoss-with-postgres-minio-redis-ha`](./example/semoss-with-postgres-minio-redis-ha) | Redis + Sentinel | HA coordination (matches the root default) |
+
+These examples run Postgres and MinIO **inside** the cluster. In production you'll more often point SEMOSS at **managed / SaaS** services instead — the section below lists the env vars that change.
+
+### Using managed / SaaS dependencies
+
+When the database and object storage are managed services (e.g. AWS RDS + S3, Cloud SQL + GCS, Azure Database + Blob) rather than in-cluster pods, you don't deploy the Postgres/MinIO manifests at all — you only change connection details in [`semoss-config-and-secrets.yml`](./semoss-config-and-secrets.yml).
+
+**Databases (managed Postgres).** There is one set of keys per database (`security`, `localmaster`, `scheduler`, `themes`, `user_tracking`, `model_logs`, `prompt_hub`, `audit_logs`). Non-sensitive keys live in the `ConfigMap`; credentials and the URL live in the `Secret`. `<db>` below is the per-database prefix (e.g. `CUSTOM_SECURITY_...`).
+
+| Env variable | In-cluster example | Managed / SaaS |
+|:---|:---|:---|
+| `CUSTOM_<db>_CONNECTION_URL` | `jdbc:postgresql://postgres:5432/security?currentSchema=public` | Point the host at the managed endpoint: `jdbc:postgresql://<rds-endpoint>:5432/security?currentSchema=public` |
+| `CUSTOM_<db>_USERNAME` | `myuser` | The managed DB user |
+| `CUSTOM_<db>_PASSWORD` | `mypassword` | The managed DB password |
+| `CUSTOM_<db>_DATABASE` / `_SCHEMA` | `security` / `public` | The database and schema names you provisioned |
+
+> `model_logs` and `audit_logs` are high-write; if you want to scale them independently, put them on their own managed instance by giving those two a different host in their `CONNECTION_URL`.
+
+**Object storage (managed buckets).** Set `SEMOSS_STORAGE_PROVIDER` and the matching keys; access/secret keys go in the `Secret`. Omit `S3_ENDPOINT` (that key is only for pointing S3-mode at MinIO):
+
+| Provider | `SEMOSS_STORAGE_PROVIDER` | Keys to set |
+|:---|:---|:---|
+| AWS S3 | `S3` | `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY`\*, `S3_SECRET_KEY`\* |
+| Google Cloud Storage | `GCP` (or `GCS`/`GOOGLE`) | `GCP_REGION`, `GCP_BUCKET`, `GCP_SERVICE_ACCOUNT_FILE` (mount the JSON key file) |
+| Azure Blob Storage | `AZURE` | `AZ_NAME`, `AZ_KEY`\*, `AZ_CONN_STRING`\*, `AZ_GENERATE_DYNAMIC_SAS` |
+
+<sub>\* credentials belong in the `Secret`, not the `ConfigMap`.</sub>
+
+#### Keyless object-storage access (IRSA / Workload Identity)
+
+On a cloud cluster you can skip storage keys entirely and let the pod authenticate
+through the cloud's pod-identity mechanism (AWS IRSA / GCP + Azure Workload
+Identity) — the recommended approach in production, since no credentials live in
+the manifests and they rotate automatically. The pod runs as the
+[`serviceaccount.yml`](./serviceaccount.yml) `ServiceAccount` bound to a cloud IAM
+role instead of using `S3_ACCESS_KEY` / `S3_SECRET_KEY`. See
+[extra-cloud-config/aws-semoss-deployment.md](./extra-cloud-config/aws-semoss-deployment.md) for the full
+walkthrough (IAM role, trust policy, and the GCP/Azure annotation equivalents).
+
+**Other values you'll typically set** (managed or not):
+
+| Env variable | Purpose |
+|:---|:---|
+| `REDIRECT` | Frontend redirect URL, e.g. `https://<INGRESS_DNS>/SemossWeb/packages/client/dist/` |
+| coordination backend | `REDIS_SENTINEL_NODES` (default) or `ZK_SERVER` — point at your coordination service |
+| `image` | The SEMOSS image to deploy (set in [`semoss-deployment.yml`](./semoss-deployment.yml)) |
+
+For the full list of configuration parameters, refer to the [AI Server Configuration Parameters]().
+
+After updating the configuration, deploy SEMOSS. With the [Quick deploy](#quick-deploy) commands the `Deployment` and `Service` are applied for you; to do it manually, apply the [SEMOSS-deployment](./semoss-deployment.yml) and then expose the pods with the [SEMOSS-service](./semoss-service.yml) YAML file:
 
 ```apiVersion: v1
 kind: Service
@@ -542,4 +381,4 @@ semoss-ingress   <none>   demo.semoss.org   ID.elb.REGION.amazonaws.com   80    
 The address value will be used to replace the INGRESS_DNS placeholder mentioned in the **REDIRECT** key value.
 
 ## Additional information
-- [AWS](./docs/aws_semoss-deployment.md)
+- [AWS](./extra-cloud-config/aws-semoss-deployment.md)

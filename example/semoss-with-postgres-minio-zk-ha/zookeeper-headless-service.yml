@@ -1,0 +1,28 @@
+# Headless service — gives each StatefulSet pod a stable DNS name
+# (zookeeper-0.zookeeper-headless, zookeeper-1..., zookeeper-2...) so ensemble
+# members can find each other for quorum/leader election. This is the
+# StatefulSet's governing service (serviceName).
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper-headless
+  namespace: semoss
+  labels:
+    app: zookeeper
+spec:
+  clusterIP: None
+  # Peers must resolve each other before they pass readiness, or the ensemble
+  # can never form.
+  publishNotReadyAddresses: true
+  selector:
+    app: zookeeper
+  ports:
+    - name: client
+      port: 2181
+      targetPort: 2181
+    - name: peer
+      port: 2888
+      targetPort: 2888
+    - name: election
+      port: 3888
+      targetPort: 3888

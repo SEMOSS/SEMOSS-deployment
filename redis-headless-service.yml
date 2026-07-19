@@ -1,0 +1,18 @@
+# Headless service — stable per-pod DNS (redis-0.redis-headless, ...) so
+# replicas, sentinels, and HAProxy can address individual Redis nodes.
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-headless
+  namespace: semoss
+  labels:
+    app: redis
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379

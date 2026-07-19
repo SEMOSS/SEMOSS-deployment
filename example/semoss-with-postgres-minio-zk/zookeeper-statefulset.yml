@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: zookeeper
+  namespace: semoss
+  labels:
+    app: zookeeper
+spec:
+  serviceName: zookeeper-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      containers:
+        - name: zookeeper
+          image: zookeeper:3.9.2
+          imagePullPolicy: Always
+          ports:
+            - name: client
+              containerPort: 2181
+          env:
+            - name: ZOO_MY_ID
+              value: "1"
+            - name: ZOO_STANDALONE_ENABLED
+              value: "true"
+            - name: ZOO_4LW_COMMANDS_WHITELIST
+              value: "ruok,srvr,stat"
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "echo ruok | nc localhost 2181 | grep imok"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "echo ruok | nc localhost 2181 | grep imok"]
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 5
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: datalog
+              mountPath: /datalog
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+    - metadata:
+        name: datalog
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

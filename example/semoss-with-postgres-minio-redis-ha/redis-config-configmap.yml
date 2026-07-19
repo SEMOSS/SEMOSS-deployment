@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: semoss
+data:
+  redis.conf: |
+    port 6379
+    appendonly yes
+    dir /data
+  # On startup, figure out who the master is (from Sentinel if it already knows,
+  # otherwise bootstrap with redis-0 as the initial master). Re-run on every
+  # restart, so a restarted ex-master correctly rejoins as a replica.
+  start-redis.sh: |
+    #!/bin/sh
+    set -e
+    MASTER_NAME=semossmaster
+    SENTINEL=redis-sentinel
+    MYIP=$(hostname -i | awk '{print $1}')
+    CONF=/tmp/redis.conf
+    cp /config/redis.conf "$CONF"
+
+    MASTER_IP=$(redis-cli -h "$SENTINEL" -p 26379 \
+      sentinel get-master-addr-by-name "$MASTER_NAME" 2>/dev/null | head -1 || true)
+
+    if [ -n "$MASTER_IP" ]; then
+      if [ "$MASTER_IP" != "$MYIP" ]; then
+        echo "Sentinel reports master $MASTER_IP; starting as replica"
+        echo "replicaof $MASTER_IP 6379" >> "$CONF"
+      else
+        echo "Sentinel reports I ($MYIP) am the master"
+      fi
+    else
+      ORDINAL=${HOSTNAME##*-}
+      if [ "$ORDINAL" = "0" ]; then
+        echo "Bootstrap: redis-0 is the initial master"
+      else
+        echo "Bootstrap: replicating from redis-0"
+        echo "replicaof redis-0.redis-headless.semoss.svc.cluster.local 6379" >> "$CONF"
+      fi
+    fi
+
+    exec redis-server "$CONF"

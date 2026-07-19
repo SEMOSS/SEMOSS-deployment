@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: semoss
+data:
+  # Runs on first Postgres startup (mounted into /docker-entrypoint-initdb.d).
+  # Creates the databases SEMOSS expects, owned by the POSTGRES_USER (myuser).
+  init.sql: |
+    CREATE DATABASE security;
+    CREATE DATABASE localmaster;
+    CREATE DATABASE scheduler;
+    CREATE DATABASE themes;
+    CREATE DATABASE user_tracking;
+    CREATE DATABASE model_logs;
+    CREATE DATABASE prompt_hub;
+    CREATE DATABASE audit_logs;

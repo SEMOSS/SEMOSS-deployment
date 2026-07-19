@@ -1,0 +1,20 @@
+# Headless service — stable per-pod DNS for the Sentinels
+# (redis-sentinel-0.redis-sentinel, ...), which SEMOSS lists in
+# REDIS_SENTINEL_NODES. Also resolvable as "redis-sentinel" for the redis
+# bootstrap script.
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-sentinel
+  namespace: semoss
+  labels:
+    app: redis-sentinel
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: redis-sentinel
+  ports:
+    - name: sentinel
+      port: 26379
+      targetPort: 26379

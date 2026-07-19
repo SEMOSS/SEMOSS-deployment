@@ -31,282 +31,12 @@ spec:
               runCS.sh
           command:
             - /bin/bash
+          envFrom:
+            - configMapRef:
+                name: semoss-config
+            - secretRef:
+                name: semoss-secrets
           env:
-            # --- Security DB ---
-            - name: CUSTOM_SECURITY_DRIVER
-              value: org.postgresql.Driver
-            - name: CUSTOM_SECURITY_RDBMS_TYPE
-              value: POSTGRES
-            - name: CUSTOM_SECURITY_USERNAME
-              value: <DB_USERNAME>
-            - name: CUSTOM_SECURITY_PASSWORD
-              value: <DB_PASSWORD>
-            - name: CUSTOM_SECURITY_SCHEMA
-              value: public
-            - name: CUSTOM_SECURITY_DATABASE
-              value: security
-            - name: CUSTOM_SECURITY_CONNECTION_URL
-              value: jdbc:postgresql://<DB_HOST>:5432/security?currentSchema=public
-
-            # --- Local Master DB ---
-            - name: CUSTOM_LM_DRIVER
-              value: org.postgresql.Driver
-            - name: CUSTOM_LM_RDBMS_TYPE
-              value: POSTGRES
-            - name: CUSTOM_LM_USERNAME
-              value: <DB_USERNAME>
-            - name: CUSTOM_LM_PASSWORD
-              value: <DB_PASSWORD>
-            - name: CUSTOM_LM_SCHEMA
-              value: public
-            - name: CUSTOM_LM_DATABASE
-              value: localmaster
-            - name: CUSTOM_LM_CONNECTION_URL
-              value: jdbc:postgresql://<DB_HOST>:5432/localmaster?currentSchema=public
-
-            # --- Scheduler DB ---
-            - name: CUSTOM_SCHEDULER_DRIVER
-              value: org.postgresql.Driver
-            - name: CUSTOM_SCHEDULER_RDBMS_TYPE
-              value: POSTGRES
-            - name: CUSTOM_SCHEDULER_USERNAME
-              value: <DB_USERNAME>
-            - name: CUSTOM_SCHEDULER_PASSWORD
-              value: <DB_PASSWORD>
-            - name: CUSTOM_SCHEDULER_SCHEMA
-              value: public
-            - name: CUSTOM_SCHEDULER_DATABASE
-              value: scheduler
-            - name: CUSTOM_SCHEDULER_CONNECTION_URL
-              value: jdbc:postgresql://<DB_HOST>:5432/scheduler?currentSchema=public
-
-            # --- Themes DB ---
-            - name: CUSTOM_THEMES_DRIVER
-              value: org.postgresql.Driver
-            - name: CUSTOM_THEMES_RDBMS_TYPE
-              value: POSTGRES
-            - name: CUSTOM_THEMES_USERNAME
-              value: <DB_USERNAME>
-            - name: CUSTOM_THEMES_PASSWORD
-              value: <DB_PASSWORD>
-            - name: CUSTOM_THEMES_SCHEMA
-              value: public
-            - name: CUSTOM_THEMES_DATABASE
-              value: themes
-            - name: CUSTOM_THEMES_CONNECTION_URL
-              value: jdbc:postgresql://<DB_HOST>:5432/themes?currentSchema=public
-
-            # --- User Tracking DB ---
-            - name: CUSTOM_USER_TRACKING_DRIVER
-              value: org.postgresql.Driver
-            - name: CUSTOM_USER_TRACKING_RDBMS_TYPE
-              value: POSTGRES
-            - name: CUSTOM_USER_TRACKING_USERNAME
-              value: <DB_USERNAME>
-            - name: CUSTOM_USER_TRACKING_PASSWORD
-              value: <DB_PASSWORD>
-            - name: CUSTOM_USER_TRACKING_SCHEMA
-              value: public
-            - name: CUSTOM_USER_TRACKING_DATABASE
-              value: user_tracking
-            - name: CUSTOM_USER_TRACKING_CONNECTION_URL
-              value: jdbc:postgresql://<DB_HOST>:5432/user_tracking?currentSchema=public
-            - name: USER_TRACKING_ENABLED
-              value: 'true'
-
-            # --- Model Inference Logs DB ---
-            - name: CUSTOM_MODEL_INFERENCE_LOGS_DRIVER
-              value: org.postgresql.Driver
-            - name: CUSTOM_MODEL_INFERENCE_LOGS_RDBMS_TYPE
-              value: POSTGRES
-            - name: CUSTOM_MODEL_INFERENCE_LOGS_USERNAME
-              value: <DB_USERNAME>
-            - name: CUSTOM_MODEL_INFERENCE_LOGS_PASSWORD
-              value: <DB_PASSWORD>
-            - name: CUSTOM_MODEL_INFERENCE_LOGS_SCHEMA
-              value: public
-            - name: CUSTOM_MODEL_INFERENCE_LOGS_DATABASE
-              value: model_logs
-            - name: CUSTOM_MODEL_INFERENCE_LOGS_CONNECTION_URL
-              value: jdbc:postgresql://<DB_HOST>:5432/model_logs?currentSchema=public
-            - name: MODEL_INFERENCE_LOGS_ENABLED
-              value: 'true'
-
-            # --- Prompt Hub DB ---
-            - name: CUSTOM_PROMPT_DRIVER
-              value: org.postgresql.Driver
-            - name: CUSTOM_PROMPT_RDBMS_TYPE
-              value: POSTGRES
-            - name: CUSTOM_PROMPT_USERNAME
-              value: <DB_USERNAME>
-            - name: CUSTOM_PROMPT_PASSWORD
-              value: <DB_PASSWORD>
-            - name: CUSTOM_PROMPTS_SCHEMA
-              value: public
-            - name: CUSTOM_PROMPT_DATABASE
-              value: prompt_hub
-            - name: CUSTOM_PROMPT_CONNECTION_URL
-              value: jdbc:postgresql://<DB_HOST>:5432/prompt_hub?currentSchema=public
-            - name: PROMPT_DB_ENABLED
-              value: 'true'
-
-            # --- Audit Logs DB ---
-            - name: CUSTOM_AUDITLOGS_DRIVER
-              value: org.postgresql.Driver
-            - name: CUSTOM_AUDITLOGS_RDBMS_TYPE
-              value: POSTGRES
-            - name: CUSTOM_AUDITLOGS_USERNAME
-              value: <DB_USERNAME>
-            - name: CUSTOM_AUDITLOGS_PASSWORD
-              value: <DB_PASSWORD>
-            - name: CUSTOM_AUDITLOGS_SCHEMA
-              value: public
-            - name: CUSTOM_AUDITLOGS_DATABASE
-              value: semoss_audit
-            - name: CUSTOM_AUDITLOGS_CONNECTION_URL
-              value: jdbc:postgresql://<DB_HOST>:5432/audit_logs?currentSchema=public
-            - name: AUDIT_LOGS_DATABASE_ENABLED
-              value: 'true'
-
-            # --- Auth & Security Settings ---
-            - name: SECURITY_ON
-              value: 'true'
-            - name: SETSOCIAL
-              value: 'true'
-            - name: ENABLE_NATIVE
-              value: 'true'
-            - name: ENABLE_NATIVE_REGISTRATION
-              value: 'true'
-            - name: ENABLE_NATIVE_ACCESS_KEY_ALLOWED
-              value: 'true'
-            - name: ENABLE_API_USER
-              value: 'true'
-            - name: API_USER_DYNAMIC
-              value: 'false'
-
-            # --- Microsoft SSO ---
-            - name: ENABLE_MS
-              value: 'true'
-            - name: MS_ACCESS_KEY_ALLOWED
-              value: 'true'
-            - name: REDIRECT
-              value: <FRONTEND_REDIRECT_URL>
-            - name: MS_AUTHORITY
-              value: https://login.microsoftonline.com/<MS_TENANT_ID>/
-            - name: MS_CLIENT_ID
-              value: <MS_CLIENT_ID>
-            - name: MS_REDIRECT
-              value: <MS_REDIRECT_URL>
-            - name: MS_SECRET_KEY
-              value: <MS_SECRET_KEY>
-            - name: MS_TENANT
-              value: <MS_TENANT_DOMAIN>
-            - name: MS_GRAPHAPI_LOOKUP
-              value: 'false'
-            - name: MS_DISPLAY_NAME
-              value: Microsoft Login
-
-            # --- App Routing ---
-            - name: MONOLITH_COOKIE
-              value: semoss
-            # - name: MONOLITH_ROUTE
-            #   value: dev
-            # - name: FE_ROUTE
-            #   value: /dev/Monolith
-
-            # --- R / Python Settings ---
-            - name: R_ON
-              value: 'false'
-            - name: R_CONNECTION_TYPE
-              value: JRI
-            - name: R_HOME
-              value: /tmp
-            - name: USE_TCP_PY
-              value: 'false'
-            - name: USE_PY_FILE
-              value: 'false'
-            - name: USE_FILE_PY
-              value: 'false'
-            - name: NATIVE_PY_SERVER
-              value: 'true'
-            - name: TCP_WORKER
-              value: prerna.tcp.SocketServer
-            - name: TCP_CLIENT
-              value: prerna.tcp.client.NativePySocketClient
-            - name: SMSS_PYTHONHOME
-              value: /usr/lib/python/semossvenv
-            - name: NETTY_R
-              value: 'true'
-            - name: NETTY_PYTHON
-              value: 'true'
-
-            # --- File Transfer ---
-            - name: FILE_TRANSFER_LIMIT
-              value: '500'
-            - name: FILE_UPLOAD_LIMIT
-              value: '500'
-
-            # --- Cluster / Storage ---
-            - name: DISABLE_GIT_TERMINAL
-              value: 'true'
-            - name: SEMOSS_IS_CLUSTER
-              value: 'true'
-            - name: SCHEDULER_ENDPOINT
-              value: http://localhost:8080/Monolith
-            - name: SESSION_TIMEOUT
-              value: '28800'
-            - name: OPTIONAL_COOKIES
-              value: 'false'
-            - name: ZK_SERVER
-              value: <ZOOKEEPER_HOST>:2181
-            - name: SEMOSS_IS_CLUSTER_ZK
-              value: 'true'
-            # Blob storage can be: AWS|GCP|AZURE
-            - name: SEMOSS_STORAGE_PROVIDER
-              value: S3
-            - name: S3_REGION
-              value: us-east-1
-            - name: S3_BUCKET
-              value: <S3_BUCKET_NAME>
-            - name: S3_ACCESS_KEY
-              value: ACCESS_KEY
-            - name: S3_SECRET_KEY
-              value: SECRET_KEY
-            - name: RCLONE_S3_NO_CHECK_BUCKET
-              value: "true"
-            # GCP storage related variables
-            - name: GCP_REGION
-              value: GCP_REGION
-            - name: GCP_BUCKET
-              value: GCP_BUCKET_NAME
-            - name: GCP_SERVICE_ACCOUNT_FILE
-              value: PATH_TO_GCP_SERVICE_ACCOUNT_FILE # format: /mnt/key/key.json
-            # AZURE storage related variables
-            - name: AZ_KEY
-              value: >-
-                AZ_KEY_VALUE
-            - name: AZ_NAME
-              value: AZ_NAME
-            - name: AZ_GENERATE_DYNAMIC_SAS
-              value: AZ_GENERATE_DYNAMIC_SAS_VALUE
-            - name: AZ_CONN_STRING
-              value: >-
-                AZ_CONN_STRING_VALUE
-
-            # --- Chroot ---
-            - name: T_ON
-              value: 'false'
-            - name: CHROOT_ENABLE
-              value: 'true'
-            - name: CHROOT_DIR
-              value: /opt/chroot
-            - name: CHROOT_SYMLINK_PATHS
-              value: /usr/lib/python
-            - name: FAKECHROOT_EXCLUDE_PATH
-              value: /dev
-            - name: ERROR_REPORT_VALVE_ENABLED
-              value: 'true'
-
             - name: POD_IP
               valueFrom:
                 fieldRef:
@@ -318,7 +48,7 @@ spec:
           livenessProbe:
             failureThreshold: 3
             httpGet:
-              path: /Monolith/api/config
+              path: /Monolith/health
               port: 8080
               scheme: HTTP
             initialDelaySeconds: 60
@@ -332,7 +62,7 @@ spec:
           readinessProbe:
             failureThreshold: 3
             httpGet:
-              path: /Monolith/api/config
+              path: /Monolith/health/ready
               port: 8080
               scheme: HTTP
             initialDelaySeconds: 60
@@ -364,6 +94,8 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       terminationGracePeriodSeconds: 30
-      # optional service account 
-      # serviceAccount: semoss-pod-s3-service-account
+      # Optional: run the pod as a cloud-identity ServiceAccount for keyless
+      # object-storage access (IRSA / Workload Identity). Uncomment the line
+      # below and apply serviceaccount.yml. See the README ("Keyless
+      # object-storage access").
       # serviceAccountName: semoss-pod-s3-service-account
