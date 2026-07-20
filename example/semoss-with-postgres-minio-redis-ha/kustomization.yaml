@@ -2,8 +2,9 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 # HA example: SEMOSS + Postgres + MinIO + Redis with Sentinel failover.
-# SEMOSS' Redis client is Sentinel-aware (REDIS_SENTINEL_ENABLED), so it connects
-# to the Sentinels directly and follows failovers — no HAProxy needed.
+# SEMOSS supports Sentinel deployments (REDIS_SENTINEL_ENABLED): it connects to
+# the Sentinels, tracks the current master, and follows failovers — no HAProxy
+# needed. (Standalone and Redis Cluster topologies are also supported.)
 # Deploy with:  kubectl apply -k .
 
 namespace: semoss

@@ -18,15 +18,15 @@ version, see [`semoss-with-postgres-minio-redis`](../semoss-with-postgres-minio-
 | `sentinel-statefulset.yml` | 3 **Sentinels** — the control plane that monitors the master and promotes a replica on failure |
 | `redis-sentinel-service.yml` | Headless service — stable per-pod DNS for the Sentinels (listed in `REDIS_SENTINEL_NODES`) |
 | `sentinel-config-configmap.yml` | Sentinel startup script (monitors master `semossmaster`, quorum 2) |
-| `semoss-config-and-secrets.yml` | SEMOSS config/secrets; Sentinel-aware (`REDIS_SENTINEL_ENABLED`, `REDIS_MASTER_NAME`, `REDIS_SENTINEL_NODES`) |
+| `semoss-config-and-secrets.yml` | SEMOSS config/secrets; Sentinel topology (`REDIS_SENTINEL_ENABLED`, `REDIS_MASTER_NAME`, `REDIS_SENTINEL_NODES`) |
 | `semoss-deployment.yml` / `semoss-service.yml` | SEMOSS `Deployment` (initContainers wait for Postgres/MinIO/Sentinel) + ClusterIP `Service` |
 | `kustomization.yaml` | Ties it all together for `kubectl apply -k .` |
 
 > **Redis vs. Sentinel** — both use the `redis:7` image (it ships both binaries).
 > Redis (`redis-server`, port 6379) stores the data; Sentinel (`redis-sentinel`,
-> port 26379) stores nothing and just supervises failover. SEMOSS is
-> Sentinel-aware, so it connects to the Sentinels and follows the master itself —
-> no proxy needed.
+> port 26379) stores nothing and just supervises failover. SEMOSS supports
+> Sentinel deployments, so it connects to the Sentinels and follows the master
+> itself — no proxy needed.
 
 ## Demo credentials (not for production)
 

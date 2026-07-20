@@ -140,18 +140,31 @@ kubectl apply -f namespace.yml     # or: kubectl create ns semoss
 
 SEMOSS uses a coordination backend to synchronize state across pods in a cluster. Choose **one** of the two options below — the backend you deploy must match the one enabled in [`semoss-config-and-secrets.yml`](./semoss-config-and-secrets.yml).
 
-### Option A — Redis + Sentinel (default)
+### Option A — Redis (default)
 
-The recommended setup is a highly-available Redis: a master + 2 replicas (a `StatefulSet`) with 3 Sentinels (a `StatefulSet`) for automatic failover. SEMOSS' Redis client is **Sentinel-aware**, so it connects to the Sentinels, resolves the current master, and follows failovers on its own — no proxy needed.
+SEMOSS supports three Redis topologies — **standalone**, **Sentinel** (HA with
+automatic failover), and **Redis Cluster** (sharded). Enable one by setting the
+matching keys in the ConfigMap (`REDIS_SENTINEL_ENABLED` / `REDIS_CLUSTER_ENABLED`);
+the shared keys apply to all modes:
+
+| Mode | Enable flag | Additional keys | Also in `Secret` |
+|:-----|:------------|:----------------|:-----------------|
+| Standalone | (neither) | `REDIS_HOST`, `REDIS_PORT` | `REDIS_PASSWORD` |
+| Sentinel (HA) | `REDIS_SENTINEL_ENABLED: "true"` | `REDIS_MASTER_NAME`, `REDIS_SENTINEL_NODES` | `REDIS_PASSWORD`, `REDIS_SENTINEL_PASSWORD` |
+| Redis Cluster | `REDIS_CLUSTER_ENABLED: "true"` | `REDIS_CLUSTER_NODES`, `REDIS_CLUSTER_MAX_ATTEMPTS` | `REDIS_PASSWORD` |
+
+Shared keys (all modes): `SEMOSS_IS_CLUSTER_REDIS`, `REDIS_ENABLED`, `REDIS_TIMEOUT_MS`, `REDIS_POOL_MAX_TOTAL`, `REDIS_POOL_MAX_IDLE`, `REDIS_POOL_MIN_IDLE`.
+
+The **default** is a highly-available Sentinel setup: a master + 2 replicas (a `StatefulSet`) with 3 Sentinels (a `StatefulSet`). Deploy it with:
 
 ```
 kubectl apply -f redis-headless-service.yml -f redis-config-configmap.yml -f redis-statefulset.yml
 kubectl apply -f sentinel-config-configmap.yml -f redis-sentinel-service.yml -f sentinel-statefulset.yml
 ```
 
-The `SEMOSS_IS_CLUSTER_REDIS`, `REDIS_ENABLED`, `REDIS_SENTINEL_ENABLED`, `REDIS_MASTER_NAME`, and `REDIS_SENTINEL_NODES` values are already set in the ConfigMap; `REDIS_SENTINEL_NODES` lists the three Sentinel pods. Set `REDIS_PASSWORD` / `REDIS_SENTINEL_PASSWORD` in the `Secret` if your Redis/Sentinel require auth.
+The Sentinel keys are already set in the ConfigMap (`REDIS_SENTINEL_NODES` lists the three Sentinel pods). Set `REDIS_PASSWORD` / `REDIS_SENTINEL_PASSWORD` in the `Secret` if your Redis/Sentinel require auth.
 
-> **Simpler option:** for a single-node Redis (dev / smoke tests), see the filled-in [`example/semoss-with-postgres-minio-redis`](./example/semoss-with-postgres-minio-redis) stack.
+> **Simpler option:** for a single-node (standalone) Redis (dev / smoke tests), see the filled-in [`example/semoss-with-postgres-minio-redis`](./example/semoss-with-postgres-minio-redis) stack. A Redis Cluster is typically an externally-managed service; point `REDIS_CLUSTER_NODES` at its endpoints.
 
 ### Option B — ZooKeeper (alternative)
 

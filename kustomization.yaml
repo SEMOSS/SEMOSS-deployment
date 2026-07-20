@@ -23,7 +23,8 @@ resources:
   # block in the ConfigMap.
   #
   # Redis (master + replicas) + Sentinel (failover) — SEMOSS connects to the
-  # Sentinels directly (Sentinel-aware client).
+  # Sentinels and tracks the current master. (SEMOSS also supports standalone
+  # and Redis Cluster topologies — see semoss-config-and-secrets.yml.)
   - redis-headless-service.yml
   - redis-config-configmap.yml
   - redis-statefulset.yml

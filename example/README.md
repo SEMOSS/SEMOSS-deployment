@@ -13,10 +13,10 @@ README** with a component breakdown and the port-forward access step.
 | [`semoss-with-postgres-minio-redis-ha`](./semoss-with-postgres-minio-redis-ha) | Redis + Sentinel (HA) | Postgres + MinIO + Redis/replicas + Sentinels + SEMOSS |
 
 The `-ha` variants make the coordination layer fault-tolerant: a 3-node ZooKeeper
-ensemble (tolerates 1 node down), or Redis with Sentinel automatic failover.
-SEMOSS' Redis client is Sentinel-aware, so it connects to the Sentinels directly
-(`REDIS_SENTINEL_ENABLED` / `REDIS_MASTER_NAME` / `REDIS_SENTINEL_NODES`) and
-follows failovers — no proxy required.
+ensemble (tolerates 1 node down), or Redis with Sentinel automatic failover. The
+Redis example uses Sentinel (`REDIS_SENTINEL_ENABLED` / `REDIS_MASTER_NAME` /
+`REDIS_SENTINEL_NODES`); SEMOSS also supports standalone and Redis Cluster
+topologies (see the Redis keys in [the root README](../README.md#option-a--redis-default)).
 
 These stacks expose SEMOSS as a `ClusterIP` service and are accessed via
 `kubectl port-forward` (see each folder's README). To reach SEMOSS through a real
