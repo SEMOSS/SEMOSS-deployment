@@ -9,7 +9,7 @@ Two manifests are provided:
 
 | File | Use |
 |:-----|:----|
-| [`ingress-local.yml`](./ingress-local.yml) | Laptop: HTTP only, no TLS, host `semoss.127.0.0.1.nip.io` |
+| [`ingress-local.yml`](./ingress-local.yml) | Laptop or single-node (minikube/kind/Docker Desktop, RKE2/K3s): HTTP only, no TLS, no host — access via `localhost` or the node/LB IP |
 | [`ingress-tls.yml`](./ingress-tls.yml) | Production: real hostname + TLS + forced HTTPS (mirrors the root [`semoss-ingress.yml`](../../semoss-ingress.yml)) |
 
 Both route `/` to `semoss-service:8080` in the `semoss` namespace, so deploy one of
@@ -44,26 +44,28 @@ kubectl -n ingress-nginx get pods
 
 ---
 
-## Local (laptop) — HTTP, no TLS
+## Laptop or single-node — HTTP, no TLS
 
-1. Install a controller (above).
-2. Apply the local ingress:
+Works the same on a laptop (minikube / kind / Docker Desktop) and on a single cloud
+node (RKE2 / K3s). The ingress is host-less, so it matches any request that reaches
+the controller — only the address you open differs (`localhost` vs the node IP).
+
+1. Install a controller (above). RKE2 ships ingress-nginx by default; K3s ships Traefik (either works — adjust `ingressClassName` if not `nginx`).
+2. Apply the ingress:
    ```
    kubectl apply -f ingress-local.yml
    ```
-3. Make the controller reachable on `localhost`:
-   - **minikube:** `minikube tunnel` (keep it running), or use `minikube ip` as the host.
-   - **kind:** the deploy manifest above maps ports 80/443 to localhost.
-   - **Docker Desktop:** the controller is on `localhost` by default.
-4. Open **http://semoss.127.0.0.1.nip.io/** — `nip.io` resolves that name to
-   `127.0.0.1`, so no `/etc/hosts` edit is needed. `app-root` redirects `/` to the
-   SEMOSS web app.
+3. Find the address the controller is reachable on:
+   ```
+   kubectl -n ingress-nginx get svc ingress-nginx-controller   # EXTERNAL-IP, or the node's IP
+   ```
+   On a single cloud node this is typically the node's public/private IP (open port 80 in the security group).
+4. Open **http://&lt;node-or-LB-IP&gt;/** — the ingress has no `host:` rule, so it matches any request that reaches the controller, and `app-root` redirects `/` to the SEMOSS web app. (On a laptop controller that binds localhost — Docker Desktop / `minikube tunnel` / kind — this is just `http://localhost/`.)
 
 > **Update `REDIRECT`.** The example config sets `REDIRECT: "http://localhost:8080/#/"`
 > for the port-forward flow. When you go through the ingress, change `REDIRECT` in
 > the stack's `semoss-config-and-secrets.yml` to the ingress URL
-> (`http://semoss.127.0.0.1.nip.io/...`) and re-apply, or logins will redirect to
-> the wrong place.
+> (`http://<node-or-LB-IP>/`) and re-apply, or logins will redirect to the wrong place.
 
 ---
 

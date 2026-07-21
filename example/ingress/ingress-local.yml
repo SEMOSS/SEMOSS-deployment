@@ -1,0 +1,40 @@
+# HTTP-only ingress for a single-node cluster (e.g. RKE2/K3s), no TLS.
+# It has no `host:` rule, so it matches any request that reaches the ingress
+# controller — access SEMOSS at http://<node-or-loadbalancer-ip>/ (the app-root
+# annotation redirects / to the SEMOSS UI). Requires an ingress controller in
+# the cluster (see README). This is a proven single-node RKE2 config.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: semoss-ingress
+  namespace: semoss
+  annotations:
+    # Route / to the SEMOSS UI
+    nginx.ingress.kubernetes.io/app-root: /SemossWeb
+
+    # Sticky sessions
+    nginx.ingress.kubernetes.io/affinity: cookie
+    nginx.ingress.kubernetes.io/session-cookie-name: semoss-nginx-dev
+    nginx.ingress.kubernetes.io/session-cookie-path: /
+    nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+
+    # SEMOSS upload/timeout settings
+    nginx.ingress.kubernetes.io/proxy-body-size: 500m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "350"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "350"
+
+    # Preserve backend cookie paths
+    nginx.ingress.kubernetes.io/proxy-cookie-path: ~*^/.* /
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: semoss-service
+                port:
+                  number: 8080

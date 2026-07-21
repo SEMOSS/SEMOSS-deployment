@@ -20,11 +20,11 @@ desktop.ini
 
 # --- Secrets & local-only overrides (do NOT commit real credentials) ---
 # Keep committed manifests as templates with placeholders; put filled-in
-# secret values in files matching these patterns so they stay out of git.
+# secret values in files using the ".local." suffix so they stay out of git
+# (e.g. my-secrets.local.yml). NOTE: only the ".local." form is ignored — a
+# hyphen like "ingress-local.yml" is a normal, committed filename.
 *.local.yml
 *.local.yaml
-*-local.yml
-*-local.yaml
 secrets.env
 .env
 .env.*
