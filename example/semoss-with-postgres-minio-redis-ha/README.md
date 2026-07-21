@@ -34,6 +34,16 @@ version, see [`semoss-with-postgres-minio-redis`](../semoss-with-postgres-minio-
 - MinIO: `minioadmin` / `minioadmin` — bucket `semoss`, endpoint `http://minio:9000`
 - Redis / Sentinel: no auth in this example
 
+## Common settings to adjust
+
+Review these before deploying — in `semoss-config-and-secrets.yml` (and `semoss-deployment.yml` for sizing):
+
+| Setting | Why you'd change it |
+|:--------|:--------------------|
+| `MONOLITH_COOKIE_SET_SECURE` | Set to `"false"` here so login works over plain **HTTP** (port-forward). Change to `"true"` when serving SEMOSS over HTTPS (an HTTPS-only cookie won't be sent over HTTP). |
+| `REDIRECT` | The address your browser uses to reach SEMOSS. Defaults to `http://localhost:8080/#/` (port-forward); change it if you access via a node IP, NodePort, or ingress. |
+| SEMOSS `resources:` | CPU/memory requests & limits in `semoss-deployment.yml` — raise or lower to fit your node. |
+
 ## Deploy
 
 ```

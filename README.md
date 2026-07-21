@@ -254,7 +254,8 @@ walkthrough (IAM role, trust policy, and the GCP/Azure annotation equivalents).
 
 | Env variable | Purpose |
 |:---|:---|
-| `REDIRECT` | Frontend redirect URL, e.g. `https://<INGRESS_DNS>/SemossWeb/packages/client/dist/` |
+| `REDIRECT` | The address your browser uses to reach SEMOSS (external host/IP + port or ingress URL) — post-login redirects here |
+| `MONOLITH_COOKIE_SET_SECURE` | `"true"` makes the session cookie HTTPS-only. Set `"false"` when accessing over plain HTTP (local/dev) or the cookie isn't sent and login fails |
 | coordination backend | `REDIS_SENTINEL_NODES` (default) or `ZK_SERVER` — point at your coordination service |
 | `image` | The SEMOSS image to deploy (set in [`semoss-deployment.yml`](./semoss-deployment.yml)) |
 
