@@ -36,7 +36,7 @@ spec:
           command: ["sh", "-c", "until nc -z zookeeper-service 2181; do echo waiting for zookeeper; sleep 3; done"]
       containers:
         - name: semoss
-          image: quay.io/semoss/semoss-dev:5.4.0-SNAPSHOT-ubuntu22-latest
+          image: quay.io/semoss/semoss-dev:6.0.0-SNAPSHOT-ubuntu22-latest
           imagePullPolicy: Always
           command: ["/bin/bash"]
           args: ["-c", "runCS.sh"]
