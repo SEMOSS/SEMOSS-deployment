@@ -1,0 +1,116 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: semoss
+  name: semoss-deployment
+  namespace: semoss
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: semoss
+      app.kubernetes.io/name: semoss
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: semoss
+        app.kubernetes.io/name: semoss
+    spec:
+      containers:
+        # NGINX sidecar container to handle cookie rewriting for Traefik
+        - name: nginx-cookie-proxy
+          image: nginx:1.31-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            limits:
+              cpu: '100m'
+              memory: 64Mi
+            requests:
+              cpu: '10m'
+              memory: 32Mi
+          volumeMounts:
+            - name: nginx-sidecar-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              
+        - args:
+            - '-c'
+            - >-
+              runCS.sh
+          command:
+            - /bin/bash
+          envFrom:
+            - configMapRef:
+                name: semoss-config
+            - secretRef:
+                name: semoss-secrets
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: status.podIP
+
+          image: IMAGE:TAG
+          imagePullPolicy: Always
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /Monolith/health
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 300
+          name: semoss
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /Monolith/health/ready
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            successThreshold: 2
+            timeoutSeconds: 10
+          resources:
+            limits:
+              cpu: '8'
+              memory: 30Gi
+            requests:
+              cpu: '6'
+              memory: 24Gi
+          securityContext:
+            capabilities:
+              drop:
+                - NET_RAW
+
+      dnsPolicy: ClusterFirst
+      imagePullSecrets:
+        - name: DOCKER_PULL_SECRET
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        fsGroup: 0
+        runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      # Optional: run the pod as a cloud-identity ServiceAccount for keyless
+      # object-storage access (IRSA / Workload Identity). Uncomment the line
+      # below and apply serviceaccount.yml. See the README ("Keyless
+      # object-storage access").
+      # serviceAccountName: semoss-pod-s3-service-account
+      volumes:
+        - name: nginx-sidecar-config
+          configMap:
+            name: semoss-nginx-sidecar-config
