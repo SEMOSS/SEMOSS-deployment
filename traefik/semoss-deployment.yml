@@ -21,8 +21,8 @@ spec:
         app.kubernetes.io/name: semoss
     spec:
       containers:
-        # NGINX sidecar container to handle cookie rewriting for Traefik
-        - name: nginx-cookie-proxy
+        # NGINX sidecar container to handle cookie rewriting and HSTS for Traefik
+        - name: nginx
           image: nginx:1.31-alpine
           ports:
             - containerPort: 80

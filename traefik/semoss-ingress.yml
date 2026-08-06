@@ -4,23 +4,22 @@ metadata:
   annotations:
     nginx.ingress.kubernetes.io/affinity: cookie
     nginx.ingress.kubernetes.io/app-root: /SemossWeb
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/hsts: "true"
-    nginx.ingress.kubernetes.io/hsts-include-subdomains: "true"
-    nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
-    nginx.ingress.kubernetes.io/hsts-preload: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true" 
     nginx.ingress.kubernetes.io/proxy-body-size: 500m
     nginx.ingress.kubernetes.io/proxy-read-timeout: "350"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "350"
     nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
     nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
-    nginx.ingress.kubernetes.io/session-cookie-name: semoss-traefik-tr
+    nginx.ingress.kubernetes.io/session-cookie-name: semoss-traefik-prod
     nginx.ingress.kubernetes.io/session-cookie-path: /
     nginx.ingress.kubernetes.io/session-cookie-secure: "true"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.org/client-max-body-size: 500m
-    # The following annotation is now handled by the nginx sidecar.
+    # The following annotations are now handled by the nginx sidecar.
     # The nginx.ingress.kubernetes.io/proxy-cookie-path:  ~*^/.* /
+    # nginx.ingress.kubernetes.io/hsts: "true"
+    # nginx.ingress.kubernetes.io/hsts-include-subdomains: "true"
+    # nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
+    # nginx.ingress.kubernetes.io/hsts-preload: "true"
     
   name: semoss-ingress
   namespace: semoss
@@ -42,3 +41,4 @@ spec:
   - hosts:
     - <DNS>
     secretName: tls-secret
+
