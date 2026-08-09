@@ -21,6 +21,7 @@ data:
           proxy_cookie_path ~*^/.* /;
           proxy_read_timeout 350s;
           proxy_send_timeout 350s;
+          client_max_body_size 500m;
         }
       }
     }

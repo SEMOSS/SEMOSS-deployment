@@ -73,6 +73,7 @@ After:   Traefik → Service:80 → nginx sidecar:80 → Tomcat:8080
   - `proxy_cookie_path ~*^/.* /;` — rewrites any cookie path to `/`.
   - `add_header Strict-Transport-Security ...` — emits HSTS on all responses.
   - `proxy_read_timeout 350s; proxy_send_timeout 350s;` — prevents 504s during long LLM inference (nginx default is 60s).
+  - `client_max_body_size 500m;` — matches the value mentioned in the ingress annotation.
   - All `*_temp_path` directives use `/tmp` so nginx runs without write access to `/var/cache/nginx` (the pod runs as UID 1001).
 
 ## Note: sidecar timeout
