@@ -1,0 +1,16 @@
+# Optional add-on: stable in-cluster endpoint for unoserver-deployment.yml.
+# See that file for enablement instructions.
+apiVersion: v1
+kind: Service
+metadata:
+  name: unoserver-service
+  namespace: semoss
+spec:
+  ports:
+    - port: 8080
+      protocol: TCP
+      targetPort: 8080
+  selector:
+    app.kubernetes.io/instance: unoserver
+    app.kubernetes.io/name: unoserver
+  type: ClusterIP

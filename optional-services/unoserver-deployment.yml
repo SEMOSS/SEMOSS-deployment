@@ -1,0 +1,88 @@
+# Optional add-on: unoserver — LibreOffice-backed document conversion.
+#
+# Not part of the base deploy. To enable, apply this directory alongside the
+# root manifests (it is deliberately left out of ../kustomization.yaml):
+#
+#   kubectl apply -f other/unoserver-deployment.yml -f other/unoserver-service.yml
+#
+# SEMOSS then reaches it at http://unoserver-service.semoss.svc.cluster.local:8080
+# This has to be added via UNOSERVER environment variable in semoss-deployment.yml
+# via semoss-config-and-secrets.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: unoserver
+  name: unoserver-deployment
+  namespace: semoss
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: unoserver
+      app.kubernetes.io/name: unoserver
+  # Stateless converter, so pods can roll one at a time (unlike semoss-deployment.yml,
+  # which uses Recreate). Keeps capacity available during an image update.
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: unoserver
+        app.kubernetes.io/name: unoserver
+    spec:
+      containers:
+        - name: unoserver
+          image: quay.io/semoss/unoserver:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          # LibreOffice takes ~30-60s to come up before /health answers, hence the
+          # long initial delay on both probes.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            successThreshold: 2
+            timeoutSeconds: 10
+          resources:
+            limits:
+              cpu: '1'
+              memory: 1Gi
+            requests:
+              cpu: '250m'
+              memory: 512Mi
+          securityContext:
+            capabilities:
+              drop:
+                - NET_RAW
+          volumeMounts:
+            # LibreOffice needs real shared memory; the default 64Mi /dev/shm
+            # causes intermittent conversion crashes.
+            - name: dshm
+              mountPath: /dev/shm
+            # The image sets HOME=/tmp/lo-home; LibreOffice writes its user
+            # profile there, so it must be writable.
+            - name: home
+              mountPath: /tmp/lo-home
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
+        - name: home
+          emptyDir: {}
+      securityContext:
+        fsGroup: 0
+        runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault
