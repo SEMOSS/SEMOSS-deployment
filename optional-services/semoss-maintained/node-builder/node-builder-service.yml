@@ -1,0 +1,16 @@
+# Optional add-on: stable in-cluster endpoint for node-builder-deployment.yml.
+# See that file for enablement instructions.
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-builder-service
+  namespace: semoss
+spec:
+  ports:
+    - port: 3000
+      protocol: TCP
+      targetPort: 3000
+  selector:
+    app.kubernetes.io/instance: node-builder
+    app.kubernetes.io/name: node-builder
+  type: ClusterIP

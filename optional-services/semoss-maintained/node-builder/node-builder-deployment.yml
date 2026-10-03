@@ -1,0 +1,108 @@
+# Optional add-on: node-builder — Node.js build service for SEMOSS app
+# clients (https://github.com/SEMOSS/smss-node-builder). SEMOSS uploads a zipped
+# client/ folder, the service runs `pnpm install && pnpm build`, and returns the
+# compiled portals/ folder as a zip.
+#
+# Not part of the base deploy. To enable, apply this directory alongside the
+# root manifests (it is deliberately left out of ../../../kustomization.yaml):
+#
+#   kubectl apply -f optional-services/semoss-maintained/node-builder/
+#
+# SEMOSS then reaches it at http://node-builder-service.semoss.svc.cluster.local:3000
+# Point SEMOSS at it by uncommenting NODE_SERVER_ENDPOINT in
+# semoss-config-and-secrets.yml (setNodeServerEndpoint.sh writes it into
+# RDF_Map.prop at startup). Use http://localhost:3000 only when the builder runs
+# in the same pod as SEMOSS (sidecar) or on your machine for local dev.
+#
+# Builds run `pnpm install`, so the pods need egress to the npm registry (or a
+# mirror configured for pnpm in air-gapped clusters).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: node-builder
+  name: node-builder-deployment
+  namespace: semoss
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: node-builder
+      app.kubernetes.io/name: node-builder
+  # Stateless build service, so pods can roll one at a time (unlike
+  # semoss-deployment.yml, which uses Recreate).
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: node-builder
+        app.kubernetes.io/name: node-builder
+    spec:
+      containers:
+        - name: node-builder
+          image: quay.io/semoss/smss-node-builder:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          env:
+            # Builds per pod; above this /ready returns 503 and the pod drops
+            # out of the Service until a build finishes.
+            - name: MAX_CONCURRENT_BUILDS
+              value: '3'
+            # Per-build memory cap (ulimit -v + NODE_OPTIONS). Keep
+            # MAX_CONCURRENT_BUILDS x this roughly within the memory limit below.
+            - name: BUILD_MEMORY_LIMIT_MB
+              value: '1024'
+            - name: BUILD_TIMEOUT_MS
+              value: '300000'
+            - name: MAX_UPLOAD_MB
+              value: '100'
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # /ready answers 503 while the pod is at MAX_CONCURRENT_BUILDS, so a
+          # saturated pod is pulled from rotation instead of queueing requests.
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 1
+          resources:
+            limits:
+              cpu: '2'
+              memory: 1792Mi
+            requests:
+              cpu: '500m'
+              memory: 768Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - NET_RAW
+          volumeMounts:
+            # Extracted sources, node_modules, and build output.
+            - name: tmp-builds
+              mountPath: /tmp/builds
+            - name: tmp-uploads
+              mountPath: /tmp/uploads
+      volumes:
+        - name: tmp-builds
+          emptyDir:
+            sizeLimit: 5Gi
+        - name: tmp-uploads
+          emptyDir:
+            sizeLimit: 1Gi
+      # The image already runs as its non-root `builder` user (whose HOME pnpm
+      # uses for its cache), so runAsUser is intentionally not overridden here.
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault

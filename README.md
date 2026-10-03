@@ -34,6 +34,7 @@ The details of these cloud resources are passed to the SEMOSS pods as environmen
 | [`kustomization.yaml`](./kustomization.yaml) | Aggregates all manifests for `kubectl apply -k .` |
 | [`deploy.sh`](./deploy.sh) | Staged deploy that waits for each dependency to be Ready before the next |
 | [`example/`](./example/) | Filled-in, self-contained runnable stacks (single-node + HA) |
+| [`optional-services/`](./optional-services/) | Add-on services not in the base deploy: [unoserver](./optional-services/semoss-maintained/unoserver/) and the [node-builder](./optional-services/semoss-maintained/node-builder/), under `semoss-maintained/`. See [Optional services](#optional-services) |
 | [`legacy/`](./legacy/) | Superseded manifests kept for reference (e.g. the old ZooKeeper `Deployment`) |
 
 ## Quick deploy
@@ -256,6 +257,7 @@ walkthrough (IAM role, trust policy, and the GCP/Azure annotation equivalents).
 |:---|:---|
 | `REDIRECT` | The address your browser uses to reach SEMOSS (external host/IP + port or ingress URL) — post-login redirects here |
 | `MONOLITH_COOKIE_SET_SECURE` | `"true"` makes the session cookie HTTPS-only. Set `"false"` when accessing over plain HTTP (local/dev) or the cookie isn't sent and login fails |
+| `AGENT_DEFAULT_TOOLS_ENABLE_NODE` / `NODE_SERVER_ENDPOINT` | Node.js agent tools and the optional client build service. See [Node.js](#nodejs-agent-tools--client-build-service) |
 | coordination backend | `REDIS_SENTINEL_NODES` (default) or `ZK_SERVER` — point at your coordination service |
 | `image` | The SEMOSS image to deploy (set in [`semoss-deployment.yml`](./semoss-deployment.yml)) |
 
@@ -393,6 +395,48 @@ semoss-ingress   <none>   demo.semoss.org   ID.elb.REGION.amazonaws.com   80    
 ```
 
 The address value will be used to replace the INGRESS_DNS placeholder mentioned in the **REDIRECT** key value.
+
+## Optional services
+
+[`optional-services/`](./optional-services/) holds add-on services that are **not** part of the base deploy and are left out of [`kustomization.yaml`](./kustomization.yaml). [`semoss-maintained/`](./optional-services/semoss-maintained/) holds the services whose images SEMOSS builds and publishes, one folder per service. Apply the ones you need on their own (`kubectl apply -f <folder>/`), then point SEMOSS at them through [`semoss-config-and-secrets.yml`](./semoss-config-and-secrets.yml).
+
+| Service | Manifests | In-cluster endpoint | SEMOSS env var |
+|:--------|:----------|:--------------------|:---------------|
+| unoserver (LibreOffice document conversion) | [`semoss-maintained/unoserver/`](./optional-services/semoss-maintained/unoserver/) | `http://unoserver-service.semoss.svc.cluster.local:8080` | `UNOSERVER` |
+| [node-builder](https://github.com/SEMOSS/smss-node-builder) (client app builds) | [`semoss-maintained/node-builder/`](./optional-services/semoss-maintained/node-builder/) | `http://node-builder-service.semoss.svc.cluster.local:3000` | `NODE_SERVER_ENDPOINT` |
+
+### Node.js (agent tools + client build service)
+
+| Env variable | Default in these manifests | Purpose |
+|:---|:---|:---|
+| `AGENT_DEFAULT_TOOLS_ENABLE_NODE` | `"true"` | Turns on the Node.js tools in the agent's default toolset |
+| `NODE_SERVER_ENDPOINT` | commented out | URL of the node-builder service. At startup `setNodeServerEndpoint.sh` writes it into `RDF_Map.prop`; if it's unset, `RDF_Map.prop` is left as is |
+| `NODE_HOME` | not set | Comes from the SEMOSS image. See below |
+
+**`NODE_HOME` comes from the image.** The SEMOSS Docker image installs Node and sets its location:
+
+```dockerfile
+ARG NODE_VERSION=24.21.0
+ENV NODE_HOME=/opt/node
+```
+
+So you don't need to set `NODE_HOME` in the ConfigMap. Set it only if you build a custom image that installs Node somewhere else. Local (non-Docker) installs still have to set `NODE_HOME` themselves, which is why local setups define it and these manifests don't.
+
+**Deploying the build service.** The node-builder (source: [SEMOSS/smss-node-builder](https://github.com/SEMOSS/smss-node-builder), image: `quay.io/semoss/smss-node-builder`) takes a zipped `client/` folder, runs `pnpm install && pnpm build`, and returns the compiled `portals/` folder as a zip. To enable it:
+
+```
+kubectl apply -f optional-services/semoss-maintained/node-builder/
+```
+
+Then uncomment `NODE_SERVER_ENDPOINT` in `semoss-config-and-secrets.yml`, re-apply it, and restart SEMOSS so `RDF_Map.prop` picks up the new value:
+
+```yaml
+  NODE_SERVER_ENDPOINT: "http://node-builder-service.semoss.svc.cluster.local:3000"
+```
+
+> **`localhost:3000` vs. the Service URL:** `http://localhost:3000` is the value for local development, and it also works if you run the builder as a sidecar container in the SEMOSS pod. When the builder runs as its own `Deployment` (as here), SEMOSS has to use the Service DNS name above, because `localhost` inside the SEMOSS pod doesn't reach it.
+
+Each builder pod runs up to `MAX_CONCURRENT_BUILDS` (3) builds at a time. When a pod is full, its `/ready` probe fails and the pod drops out of the Service until a build finishes. Builds run `pnpm install`, so the pods need egress to the npm registry, or a pnpm registry mirror in air-gapped clusters. To autoscale, see the HPA in the upstream [`k8s-manifests.yaml`](https://github.com/SEMOSS/smss-node-builder/blob/main/k8s-manifests.yaml).
 
 ## Additional information
 - [AWS](./extra-cloud-config/aws-semoss-deployment.md)

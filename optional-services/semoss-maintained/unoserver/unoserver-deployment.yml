@@ -1,9 +1,9 @@
 # Optional add-on: unoserver — LibreOffice-backed document conversion.
 #
 # Not part of the base deploy. To enable, apply this directory alongside the
-# root manifests (it is deliberately left out of ../kustomization.yaml):
+# root manifests (it is deliberately left out of ../../../kustomization.yaml):
 #
-#   kubectl apply -f other/unoserver-deployment.yml -f other/unoserver-service.yml
+#   kubectl apply -f optional-services/semoss-maintained/unoserver/
 #
 # SEMOSS then reaches it at http://unoserver-service.semoss.svc.cluster.local:8080
 # This has to be added via UNOSERVER environment variable in semoss-deployment.yml
