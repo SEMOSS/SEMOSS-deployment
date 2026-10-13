@@ -18,9 +18,6 @@ spec:
     spec:
       containers:
         - name: minio
-          # MinIO removed its minio/minio images from Docker Hub and quay.io in
-          # 2025. alpine/minio is a community repackaging of the server binary
-          # (multi-arch incl. arm64). Pin a dated tag; never use :latest.
           image: alpine/minio:RELEASE.2025-10-15T17-29-55Z
           imagePullPolicy: Always
           command: ["minio"]
