@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-createbucket
+  namespace: semoss
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        app: minio-createbucket
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-bucket
+          # The minio/mc image no longer exists, so create the bucket with the
+          # official AWS CLI instead; MinIO speaks the S3 API.
+          image: amazon/aws-cli:latest
+          imagePullPolicy: Always
+          env:
+            # Must match MINIO_ROOT_USER / MINIO_ROOT_PASSWORD in minio-statefulset.yml
+            - name: AWS_ACCESS_KEY_ID
+              value: "minioadmin"
+            - name: AWS_SECRET_ACCESS_KEY
+              value: "minioadmin"
+            - name: AWS_DEFAULT_REGION
+              value: "us-east-1"
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              until aws --endpoint-url http://minio:9000 s3 ls >/dev/null 2>&1; do
+                echo "waiting for minio..."; sleep 3;
+              done
+              aws --endpoint-url http://minio:9000 s3 mb s3://semoss || true
+              echo "bucket 'semoss' ready"
