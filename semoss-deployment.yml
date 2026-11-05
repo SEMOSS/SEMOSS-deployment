@@ -44,7 +44,7 @@ spec:
                   fieldPath: status.podIP
 
           # Replace with the image you want to deploy. 
-          # Example: quay.io/semoss/semoss-dev:6.0.0-SNAPSHOT-ubuntu22-latest
+          # Example: quay.io/semoss/semoss-dev:6.1.0-SNAPSHOT-ubuntu22-latest
           image: IMAGE:TAG
           imagePullPolicy: Always
           livenessProbe:
