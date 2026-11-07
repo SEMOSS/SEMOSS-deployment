@@ -13,7 +13,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: mc
-          image: minio/mc:latest
+          image: pgsty/mc:RELEASE.2026-10-26T00-00-00Z
           imagePullPolicy: Always
           command: ["/bin/sh", "-c"]
           args:
