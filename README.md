@@ -34,7 +34,7 @@ The details of these cloud resources are passed to the SEMOSS pods as environmen
 | [`kustomization.yaml`](./kustomization.yaml) | Aggregates all manifests for `kubectl apply -k .` |
 | [`deploy.sh`](./deploy.sh) | Staged deploy that waits for each dependency to be Ready before the next |
 | [`example/`](./example/) | Filled-in, self-contained runnable stacks (single-node + HA) |
-| [`optional-services/`](./optional-services/) | Add-on services not in the base deploy: [unoserver](./optional-services/semoss-maintained/unoserver/) and the [node-builder](./optional-services/semoss-maintained/node-builder/), under `semoss-maintained/`. See [Optional services](#optional-services) |
+| [`optional-services/`](./optional-services/) | Add-on services not in the base deploy: [unoserver](./optional-services/semoss-maintained/unoserver/) and the [node-builder](./optional-services/semoss-maintained/node-builder/) under `semoss-maintained/`, and [SearXNG](./optional-services/third-party/searxng/) under `third-party/`. See [Optional services](#optional-services) |
 | [`legacy/`](./legacy/) | Superseded manifests kept for reference (e.g. the old ZooKeeper `Deployment`) |
 
 ## Quick deploy
@@ -398,12 +398,13 @@ The address value will be used to replace the INGRESS_DNS placeholder mentioned 
 
 ## Optional services
 
-[`optional-services/`](./optional-services/) holds add-on services that are **not** part of the base deploy and are left out of [`kustomization.yaml`](./kustomization.yaml). [`semoss-maintained/`](./optional-services/semoss-maintained/) holds the services whose images SEMOSS builds and publishes, one folder per service. Apply the ones you need on their own (`kubectl apply -f <folder>/`), then point SEMOSS at them through [`semoss-config-and-secrets.yml`](./semoss-config-and-secrets.yml).
+[`optional-services/`](./optional-services/) holds add-on services that are **not** part of the base deploy and are left out of [`kustomization.yaml`](./kustomization.yaml). [`semoss-maintained/`](./optional-services/semoss-maintained/) holds the services whose images SEMOSS builds and publishes, one folder per service, and [`third-party/`](./optional-services/third-party/) holds services that run another project's published image. Apply the ones you need on their own (`kubectl apply -f <folder>/`), then point SEMOSS at them through [`semoss-config-and-secrets.yml`](./semoss-config-and-secrets.yml).
 
 | Service | Manifests | In-cluster endpoint | SEMOSS env var |
 |:--------|:----------|:--------------------|:---------------|
 | unoserver (LibreOffice document conversion) | [`semoss-maintained/unoserver/`](./optional-services/semoss-maintained/unoserver/) | `http://unoserver-service.semoss.svc.cluster.local:8080` | `UNOSERVER` |
 | [node-builder](https://github.com/SEMOSS/smss-node-builder) (client app builds) | [`semoss-maintained/node-builder/`](./optional-services/semoss-maintained/node-builder/) | `http://node-builder-service.semoss.svc.cluster.local:3000` | `NODE_SERVER_ENDPOINT` |
+| [SearXNG](https://github.com/searxng/searxng) (web search for agents) | [`third-party/searxng/`](./optional-services/third-party/searxng/) | `http://searxng-service.semoss.svc.cluster.local:8080` | `WEB_SEARCH_ENABLED`, `SEARXNG_URL`. See [SearXNG](#searxng-web-search) |
 
 ### Node.js (agent tools + client build service)
 
@@ -437,6 +438,45 @@ Then uncomment `NODE_SERVER_ENDPOINT` in `semoss-config-and-secrets.yml`, re-app
 > **`localhost:3000` vs. the Service URL:** `http://localhost:3000` is the value for local development, and it also works if you run the builder as a sidecar container in the SEMOSS pod. When the builder runs as its own `Deployment` (as here), SEMOSS has to use the Service DNS name above, because `localhost` inside the SEMOSS pod doesn't reach it.
 
 Each builder pod runs up to `MAX_CONCURRENT_BUILDS` (3) builds at a time. When a pod is full, its `/ready` probe fails and the pod drops out of the Service until a build finishes. Builds run `pnpm install`, so the pods need egress to the npm registry, or a pnpm registry mirror in air-gapped clusters. To autoscale, see the HPA in the upstream [`k8s-manifests.yaml`](https://github.com/SEMOSS/smss-node-builder/blob/main/k8s-manifests.yaml).
+
+### SearXNG (web search)
+
+[SearXNG](https://github.com/searxng/searxng) is a self-hosted metasearch engine. SEMOSS's Web Search MCP calls it so that models without a built-in search tool (Laguna, Nova, Claude on Bedrock) can search the web and read pages. Its image, `docker.io/searxng/searxng`, comes from the SearXNG project, which is why it lives under `third-party/`.
+
+| File | Creates |
+|:-----|:--------|
+| [`searxng-config-and-secrets.yml`](./optional-services/third-party/searxng/searxng-config-and-secrets.yml) | The `searxng-config` ConfigMap, holding SearXNG's `settings.yml` (JSON results on, rate limiter off), and the `searxng-secrets` Secret, holding `SEARXNG_SECRET` |
+| [`searxng-deployment.yml`](./optional-services/third-party/searxng/searxng-deployment.yml) | `searxng-deployment`, which mounts the settings as `/etc/searxng/settings.yml` |
+| [`searxng-service.yml`](./optional-services/third-party/searxng/searxng-service.yml) | `searxng-service` (ClusterIP, port 8080) |
+
+**Deploying it.** Replace `<SEARXNG_SECRET>` in `searxng-config-and-secrets.yml` with a random value from `openssl rand -hex 32`, or keep the filled-in copy in a git-ignored `*.local.yml` file. Then apply the folder:
+
+```
+kubectl apply -f optional-services/third-party/searxng/
+```
+
+From Lens, create the files in the same order: `searxng-config-and-secrets.yml` first, then the Deployment and the Service. To check it from your machine:
+
+```
+kubectl -n semoss port-forward svc/searxng-service 8888:8080
+curl -s "http://localhost:8888/search?q=semoss&format=json" | head -c 300
+```
+
+**Pointing SEMOSS at it.** Uncomment both lines in `semoss-config-and-secrets.yml`, re-apply it, and restart SEMOSS:
+
+```yaml
+  WEB_SEARCH_ENABLED: "true"
+  SEARXNG_URL: "http://searxng-service.semoss.svc.cluster.local:8080"
+```
+
+| Env variable | Purpose |
+|:---|:---|
+| `WEB_SEARCH_ENABLED` | Registers the Web Search MCP at startup. It is off by default, so instances without SearXNG never offer the tools |
+| `SEARXNG_URL` | Where the Web Search MCP's tools reach SearXNG |
+
+The settings must keep JSON results on and the rate limiter off. The SEMOSS repo carries the same file for local Docker runs (`project/platform__web-search/searxng/settings.yml`), so change both together.
+
+SearXNG gets its results by querying public search engines (Google, Bing, DuckDuckGo, Brave and others), so the pods need internet egress. Those engines sometimes throttle cloud IP ranges; when they all do, searches come back empty, and the SEMOSS tool lists the engines that didn't respond. Automated querying is also against those engines' terms of service, so confirm that is acceptable for your deployment.
 
 ## Additional information
 - [AWS](./extra-cloud-config/aws-semoss-deployment.md)

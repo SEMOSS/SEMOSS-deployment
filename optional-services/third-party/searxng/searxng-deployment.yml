@@ -1,0 +1,104 @@
+# Optional add-on: SearXNG — self-hosted metasearch engine behind SEMOSS's
+# web-search platform MCP, which gives models without a built-in search tool
+# (Laguna, Nova, Claude on Bedrock) web search. Third-party image
+# (docker.io/searxng/searxng); SEMOSS does not build it.
+#
+# Not part of the base deploy. To enable, replace the <SEARXNG_SECRET>
+# placeholder in searxng-config-and-secrets.yml, then apply this directory
+# alongside the root manifests (it is deliberately left out of
+# ../../../kustomization.yaml):
+#
+#   kubectl apply -f optional-services/third-party/searxng/
+#
+# SEMOSS then reaches it at http://searxng-service.semoss.svc.cluster.local:8080
+# Point SEMOSS at it by uncommenting WEB_SEARCH_ENABLED and SEARXNG_URL in
+# semoss-config-and-secrets.yml.
+#
+# SearXNG gets its results by querying public search engines (Google, Bing,
+# DuckDuckGo, Brave and others), so the pods need internet egress. Those engines
+# sometimes throttle cloud IP ranges, and automated querying is against their
+# terms of service; confirm that is acceptable for your deployment.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/name: searxng
+  name: searxng-deployment
+  namespace: semoss
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: searxng
+      app.kubernetes.io/name: searxng
+  # Stateless (the limiter and its valkey database are off), so pods can roll
+  # one at a time. Raise replicas for more search capacity.
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: searxng
+        app.kubernetes.io/name: searxng
+    spec:
+      containers:
+        - name: searxng
+          # Pin to a dated tag or digest for production; latest can change
+          # settings behavior between restarts.
+          image: docker.io/searxng/searxng:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SEARXNG_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: searxng-secrets
+                  key: SEARXNG_SECRET
+            # The image listens on [::]; listen on IPv4 so it also starts
+            # where pods have no IPv6.
+            - name: GRANIAN_HOST
+              value: '0.0.0.0'
+            # settings.yml comes from a read-only ConfigMap, so skip the
+            # entrypoint's chown of /etc/searxng.
+            - name: FORCE_OWNERSHIP
+              value: 'false'
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            limits:
+              cpu: '500m'
+              memory: 1Gi
+            requests:
+              cpu: '250m'
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - NET_RAW
+          volumeMounts:
+            # SearXNG reads /etc/searxng/settings.yml at startup.
+            - name: settings
+              mountPath: /etc/searxng
+              readOnly: true
+      volumes:
+        - name: settings
+          configMap:
+            name: searxng-config
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
