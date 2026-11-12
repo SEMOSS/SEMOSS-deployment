@@ -198,7 +198,7 @@ Key groups to review:
 | Section | What to set |
 |:--------|:------------|
 | Backing databases | `CUSTOM_<db>_DATABASE` / `_SCHEMA` names to match what you created; credentials + `_CONNECTION_URL` go in the `Secret` |
-| Authentication & security | Only `NATIVE` and `MICROSOFT` are enabled by default; other SSO providers (`ADFS`, `GOOGLE`, `OKTA`, `LDAP`, …) ship as commented scaffolding. Secret keys / passwords live in the `Secret` |
+| Authentication & security | Only `NATIVE` and `MICROSOFT` are enabled by default; other SSO providers (`ADFS`, `GOOGLE`, `KEYCLOAK`, `OKTA`, `SAML`, `LDAP`, …) ship as commented scaffolding. Secret keys / passwords live in the `Secret` |
 | Object storage | `SEMOSS_STORAGE_PROVIDER` (`S3`, `MINIO`, `AZURE`, `GCP`, or `LOCAL_FILE_SYSTEM`) plus the matching keys; access/secret keys live in the `Secret` |
 | Clustering | Enable exactly one of the ZooKeeper or Redis blocks |
 
