@@ -201,6 +201,25 @@ Key groups to review:
 | Authentication & security | Only `NATIVE` and `MICROSOFT` are enabled by default; other SSO providers (`ADFS`, `GOOGLE`, `KEYCLOAK`, `OKTA`, `SAML`, `LDAP`, …) ship as commented scaffolding. Secret keys / passwords live in the `Secret` |
 | Object storage | `SEMOSS_STORAGE_PROVIDER` (`S3`, `MINIO`, `AZURE`, `GCP`, or `LOCAL_FILE_SYSTEM`) plus the matching keys; access/secret keys live in the `Secret` |
 | Clustering | Enable exactly one of the ZooKeeper or Redis blocks |
+| Secret store | Off by default (`SECRET_STORE_ENABLED: "false"`). See [Managing secrets](#managing-secrets) |
+
+### Managing secrets
+
+`semoss-config-and-secrets.yml` is a template. Its `Secret` holds placeholders, so don't commit the file once you've filled in real values. A Kubernetes `Secret` is only base64-encoded, not encrypted, so in production also turn on [encryption at rest](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/) for the cluster and limit who can read Secrets in the `semoss` namespace.
+
+**Keeping credentials out of the manifest.** Instead of filling in the `Secret` in the file, you can create `semoss-secrets` yourself from a git-ignored `secrets.env` (one `KEY=value` per line, without quotes):
+
+```
+kubectl -n semoss create secret generic semoss-secrets --from-env-file=secrets.env
+```
+
+You can also have the [External Secrets Operator](https://external-secrets.io/) sync it from a vault, or commit it encrypted with [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets) or [SOPS](https://github.com/getsops/sops). When the Secret comes from somewhere other than this file, delete the `Secret` from your copy of `semoss-config-and-secrets.yml`: `kubectl apply -k .` and `deploy.sh` apply the whole file, so they would overwrite your Secret with the placeholders.
+
+**Keyless access.** Where the cloud supports it, skip keys entirely: object storage and the AWS and Azure secret stores below can authenticate through the pod's service account. See [Keyless object-storage access](#keyless-object-storage-access-irsa--workload-identity).
+
+**SEMOSS secret store.** SEMOSS can keep the credentials of the databases, storage, models, vector stores and other engines users add, plus insight encryption keys, in HashiCorp Vault, Azure Key Vault or AWS Secrets Manager. It doesn't replace `semoss-secrets`: the settings in `semoss-config-and-secrets.yml` still come from the Kubernetes Secret. The store is off by default. To turn it on, set `SECRET_STORE_ENABLED: "true"` and `SECRET_STORE_TYPE` in the ConfigMap, uncomment the store's block there, and uncomment its credentials in the Secret.
+
+With AWS Secrets Manager and no keys set, SEMOSS uses the pod's service account. SEMOSS writes secrets when users add engines, not only reads them, so the IAM role needs `secretsmanager:GetSecretValue`, `CreateSecret`, `PutSecretValue`, `DescribeSecret`, `DeleteSecret` and `RestoreSecret`, plus `kms:GenerateDataKey` and `kms:Decrypt` on the key if you set `AWS_SECRETS_MANAGER_KMS_KEY_ID`.
 
 ### Example configurations
 
